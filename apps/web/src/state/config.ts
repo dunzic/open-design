@@ -380,6 +380,9 @@ export function mergeDaemonConfig(
   if (daemonConfig.orbit !== undefined) {
     next.orbit = normalizeOrbit(daemonConfig.orbit);
   }
+  if (daemonConfig.manualProxyEnabled !== undefined) {
+    next.manualProxyEnabled = daemonConfig.manualProxyEnabled;
+  }
   return next;
 }
 
@@ -435,6 +438,7 @@ export async function syncConfigToDaemon(
     disabledSkills: config.disabledSkills,
     disabledDesignSystems: config.disabledDesignSystems,
     orbit: normalizeOrbit(config.orbit),
+    manualProxyEnabled: config.manualProxyEnabled === true,
   };
   try {
     const response = await fetch('/api/app-config', {

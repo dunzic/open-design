@@ -1317,6 +1317,36 @@ export function SettingsDialog({
                   <p className="hint">{t('settings.codeAgentHint')}</p>
                 </div>
                 <div className="section-head-actions">
+                  {/* Fork-only (custom/004): manual proxy toggle. Routes
+                      both daemon outbound and spawned CLI children
+                      through http://127.0.0.1:7890 (Clash/Surge default).
+                      Tooltip shows the exact endpoint so the user knows
+                      what they're toggling without opening Settings docs. */}
+                  {(() => {
+                    const proxyOn = cfg.manualProxyEnabled === true;
+                    const tooltip = proxyOn
+                      ? 'Proxy ON — routing through http://127.0.0.1:7890 (NO_PROXY=localhost,127.0.0.1,::1). Click to disable.'
+                      : 'Proxy OFF — daemon and CLIs go direct. Click to route through http://127.0.0.1:7890 (Clash/Surge default port).';
+                    return (
+                      <button
+                        type="button"
+                        className={
+                          'ghost icon-btn settings-proxy-btn' +
+                          (proxyOn ? ' active' : '')
+                        }
+                        onClick={() =>
+                          setCfg((c) => ({
+                            ...c,
+                            manualProxyEnabled: !proxyOn,
+                          }))
+                        }
+                        title={tooltip}
+                        aria-pressed={proxyOn}
+                      >
+                        {proxyOn ? 'Proxy: ON' : 'Proxy: OFF'}
+                      </button>
+                    );
+                  })()}
                   {(() => {
                     const selected = agents.find(
                       (a) => a.id === cfg.agentId && a.available,

@@ -34,6 +34,8 @@ export interface AppConfigPrefs {
   disabledSkills?: string[];
   disabledDesignSystems?: string[];
   orbit?: OrbitConfigPrefs;
+  // Fork-only (custom/004) — see contracts/api/app-config.ts for the doc.
+  manualProxyEnabled?: boolean;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -46,6 +48,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'disabledSkills',
   'disabledDesignSystems',
   'orbit',
+  'manualProxyEnabled',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -163,7 +166,7 @@ function applyConfigValue(
   key: keyof AppConfigPrefs,
   value: unknown,
 ): void {
-  if (key === 'onboardingCompleted') {
+  if (key === 'onboardingCompleted' || key === 'manualProxyEnabled') {
     if (typeof value === 'boolean') target[key] = value;
     return;
   }

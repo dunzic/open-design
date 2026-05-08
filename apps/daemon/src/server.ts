@@ -103,6 +103,7 @@ import {
   setToken,
 } from './mcp-tokens.js';
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from './app-config.js';
+import { setManualProxyEnabled } from './http-proxy.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import {
@@ -1824,6 +1825,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
   void readAppConfig(RUNTIME_DATA_DIR)
     .then((config) => {
       orbitService.configure(config.orbit);
+      // Apply persisted manual-proxy toggle (custom/004). cli.ts already
+      // called configureGlobalProxy() at process start; this re-runs the
+      // resolution with manualProxyEnabled honored.
+      setManualProxyEnabled(config.manualProxyEnabled === true);
       return detectAgents(config.agentCliEnv ?? {});
     })
     .catch(() => detectAgents().catch(() => {}));
@@ -4315,6 +4320,10 @@ export async function startServer({ port = 7456, host = process.env.OD_BIND_HOST
     try {
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
       orbitService.configure(config.orbit);
+      // custom/004 — flip the global undici dispatcher in real time so the
+      // user doesn't need to restart the daemon after toggling the proxy
+      // switch in Settings.
+      setManualProxyEnabled(config.manualProxyEnabled === true);
       res.json({ config });
     } catch (err) {
       res

@@ -301,6 +301,12 @@ export interface AppConfig {
   // IDs of skills/design-systems the user has explicitly disabled.
   disabledSkills?: string[];
   disabledDesignSystems?: string[];
+  // Fork-only (custom/004): when true, daemon routes outbound HTTP and
+  // spawned CLI children through a hardcoded local proxy at
+  // http://127.0.0.1:7890. Toggled from the Settings dialog button next
+  // to "Test"; persisted server-side via /api/app-config so it survives
+  // daemon restarts.
+  manualProxyEnabled?: boolean;
 }
 
 export interface ComposioSettings {
