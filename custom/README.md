@@ -9,6 +9,9 @@ folder tells you why we touched it and how to re-apply.
 
 - One Markdown file per discrete requirement / session, prefixed with a
   three-digit serial. Keep them small and self-contained.
+- Pre-implementation research, plans, and roadmaps live under
+  `custom/todos/<topic>.md`. Once a plan is approved and broken into
+  steps, each step graduates to its own numbered `custom/NNN-*.md`.
 - Each file lists the file paths it touched (under "Modified" / "Added"),
   short rationale, and a "Re-apply notes" section for when an upstream
   rewrite blows the change away.
