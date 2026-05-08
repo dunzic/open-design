@@ -22,6 +22,7 @@ folder tells you why we touched it and how to re-apply.
 | --- | ----- | ---- | ------ |
 | 001 | [Daemon respects host HTTP_PROXY / HTTPS_PROXY](001-daemon-http-proxy-env.md) | 2026-05-08 | Active |
 | 002 | [Daemon detects OS system proxy (Windows registry / macOS scutil)](002-daemon-system-proxy-detection.md) | 2026-05-08 | Active |
+| 003 | [Fork release workflow (unsigned installer pipeline)](003-fork-release-workflow.md) | 2026-05-09 | Active |
 
 
 ## Merge policy — **四原则**
