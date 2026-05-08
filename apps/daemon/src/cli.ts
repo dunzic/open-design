@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 // @ts-nocheck
+import { configureGlobalProxy } from './http-proxy.js';
 import { startServer } from './server.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+
+// Install the global undici dispatcher before any subcommand or daemon
+// route runs a fetch. ESM imports above are hoisted, but no imported
+// module fetches at evaluation time — they only build closures.
+// Module-level dispatchers (see media.ts) read process.env at construction,
+// which is already populated by the OS at process start, so they pick up
+// the right behavior regardless of when configureGlobalProxy() runs.
+configureGlobalProxy();
 
 const argv = process.argv.slice(2);
 

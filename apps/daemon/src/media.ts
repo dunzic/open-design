@@ -42,7 +42,7 @@ import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { Agent as UndiciAgent } from 'undici';
+import { createOutboundDispatcher } from './http-proxy.js';
 import {
   AUDIO_DURATIONS_SEC,
   VIDEO_LENGTHS_SEC,
@@ -522,10 +522,22 @@ function defaultAspectFor(surface) {
 const AZURE_DEFAULT_API_VERSION = '2024-02-01';
 const OPENAI_IMAGE_HEADERS_TIMEOUT_MS = 10 * 60 * 1000;
 const OPENAI_IMAGE_BODY_TIMEOUT_MS = 10 * 60 * 1000;
-const openAIImageDispatcher = new UndiciAgent({
-  headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
-  bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
-});
+// Lazy: built on first image request, NOT at module load. cli.ts calls
+// configureGlobalProxy() AFTER ESM imports have evaluated this module, so
+// any module-level dispatcher captured here would miss Layer 2 (system
+// proxy detection) — env vars are set after the global proxy resolution
+// runs, so we must defer construction until the proxy state is final.
+// Once built, the dispatcher is cached for the process lifetime.
+let _openAIImageDispatcher = null;
+function getOpenAIImageDispatcher() {
+  if (_openAIImageDispatcher == null) {
+    _openAIImageDispatcher = createOutboundDispatcher({
+      headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
+      bodyTimeout: OPENAI_IMAGE_BODY_TIMEOUT_MS,
+    });
+  }
+  return _openAIImageDispatcher;
+}
 
 async function renderOpenAIImage(ctx, credentials) {
   if (!credentials.apiKey) {
@@ -572,7 +584,7 @@ async function renderOpenAIImage(ctx, credentials) {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    dispatcher: openAIImageDispatcher,
+    dispatcher: getOpenAIImageDispatcher(),
   });
   const text = await resp.text();
   if (!resp.ok) {
