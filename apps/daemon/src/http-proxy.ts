@@ -16,6 +16,14 @@
 // connectors, the /api/proxy/* chat routes — picks up the proxy without
 // per-call changes.
 //
+// Scope: this module configures the daemon's own outbound dispatcher
+// only. It deliberately does NOT mutate process.env, so spawned children
+// (Claude CLI, Codex, etc.) inherit whatever proxy env the user
+// configured at the OS level, not whatever the daemon detected. Forcing
+// children through a system proxy that's only valid for browser-shaped
+// traffic was a real regression — the agent CLIs hung on smoke tests
+// when Clash-style proxies refused their destination.
+//
 // NO_PROXY behavior: if the user has not set NO_PROXY (and the system
 // proxy detection didn't supply one), default to bypassing loopback so
 // local providers (Ollama, LM Studio, llama.cpp) and the daemon's own
@@ -35,6 +43,14 @@ interface ProxyEnv {
   all: string | undefined;
   no: string | undefined;
 }
+
+interface ResolvedProxy {
+  http?: string;
+  https?: string;
+  noProxy: string;
+}
+
+const DEFAULT_NO_PROXY = 'localhost,127.0.0.1,::1';
 
 function readProxyEnv(): ProxyEnv {
   return {
@@ -67,45 +83,50 @@ export function maskProxyUrl(url: string | undefined): string | undefined {
 }
 
 let configured = false;
+let resolvedProxy: ResolvedProxy | null = null;
 
-// Bridges OS-level system proxy into env vars so EnvHttpProxyAgent picks
-// it up. We mutate process.env (rather than constructing the agent
-// manually) for two reasons: it keeps the resolution path uniform with
-// Layer 1, and any child processes the daemon spawns inherit the same
-// proxy without extra wiring.
-function applySystemProxyToEnv(): 'env' | 'system' | 'none' {
-  if (isProxyEnvConfigured()) return 'env';
+function resolveProxy(): {
+  source: 'env' | 'system' | 'none';
+  proxy: ResolvedProxy | null;
+} {
+  const env = readProxyEnv();
+  if (env.https || env.http || env.all) {
+    const proxy: ResolvedProxy = { noProxy: env.no ?? DEFAULT_NO_PROXY };
+    const http = env.http ?? env.all;
+    const https = env.https ?? env.all;
+    if (http) proxy.http = http;
+    if (https) proxy.https = https;
+    return { source: 'env', proxy };
+  }
 
   const sys = detectSystemProxy();
-  if (!sys) return 'none';
-
-  if (sys.https) process.env.HTTPS_PROXY = sys.https;
-  if (sys.http) process.env.HTTP_PROXY = sys.http;
-  if (sys.noProxy && !process.env.NO_PROXY && !process.env.no_proxy) {
-    process.env.NO_PROXY = sys.noProxy;
+  if (sys && (sys.http || sys.https)) {
+    const proxy: ResolvedProxy = { noProxy: sys.noProxy ?? DEFAULT_NO_PROXY };
+    if (sys.http) proxy.http = sys.http;
+    if (sys.https) proxy.https = sys.https;
+    return { source: 'system', proxy };
   }
-  return isProxyEnvConfigured() ? 'system' : 'none';
+
+  return { source: 'none', proxy: null };
 }
 
 export function configureGlobalProxy(): void {
   if (configured) return;
   configured = true;
 
-  const source = applySystemProxyToEnv();
-  if (source === 'none') return;
+  const { source, proxy } = resolveProxy();
+  resolvedProxy = proxy;
+  if (!proxy) return;
 
-  if (!process.env.NO_PROXY && !process.env.no_proxy) {
-    process.env.NO_PROXY = 'localhost,127.0.0.1,::1';
-  }
+  // Pass proxy URLs explicitly so EnvHttpProxyAgent doesn't fall back to
+  // reading process.env at request time. Children spawned later in the
+  // daemon (CLI agents) get an unmodified env from the OS.
+  setGlobalDispatcher(new EnvHttpProxyAgent(envProxyAgentOpts(proxy)));
 
-  setGlobalDispatcher(new EnvHttpProxyAgent());
-
-  const env = readProxyEnv();
   console.log(`[proxy] outbound fetch will use ${source} proxy`, {
-    https: maskProxyUrl(env.https),
-    http: maskProxyUrl(env.http),
-    all: maskProxyUrl(env.all),
-    no: process.env.NO_PROXY,
+    https: maskProxyUrl(proxy.https),
+    http: maskProxyUrl(proxy.http),
+    no: proxy.noProxy,
   });
 }
 
@@ -117,12 +138,37 @@ export function createOutboundDispatcher(opts: {
   headersTimeout?: number;
   bodyTimeout?: number;
 }): Dispatcher {
-  return isProxyEnvConfigured()
-    ? new EnvHttpProxyAgent(opts)
-    : new Agent(opts);
+  if (resolvedProxy) {
+    return new EnvHttpProxyAgent({
+      ...opts,
+      ...envProxyAgentOpts(resolvedProxy),
+    });
+  }
+  // env-var fallback for callers reached before configureGlobalProxy()
+  // (e.g. unit tests of media.ts that set HTTPS_PROXY but skip global
+  // configuration). In normal daemon boot, configureGlobalProxy() runs
+  // first and resolvedProxy is already cached.
+  if (isProxyEnvConfigured()) return new EnvHttpProxyAgent(opts);
+  return new Agent(opts);
 }
 
-// Test-only — lets unit tests reset the configure-once latch between cases.
+// Builds an EnvHttpProxyAgent options object that only includes the
+// httpProxy / httpsProxy keys when they actually have values. Required
+// because `exactOptionalPropertyTypes: true` rejects `key: undefined`.
+function envProxyAgentOpts(
+  proxy: ResolvedProxy,
+): { httpProxy?: string; httpsProxy?: string; noProxy: string } {
+  const opts: { httpProxy?: string; httpsProxy?: string; noProxy: string } = {
+    noProxy: proxy.noProxy,
+  };
+  if (proxy.http) opts.httpProxy = proxy.http;
+  if (proxy.https) opts.httpsProxy = proxy.https;
+  return opts;
+}
+
+// Test-only — lets unit tests reset the configure-once latch + cache
+// between cases.
 export function __resetGlobalProxyForTests(): void {
   configured = false;
+  resolvedProxy = null;
 }

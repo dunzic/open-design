@@ -1,9 +1,29 @@
 # 002 — Daemon detects OS system proxy (Windows registry / macOS scutil)
 
-- **Date:** 2026-05-08
+- **Date:** 2026-05-08 (revised 2026-05-09)
 - **Status:** Active
-- **Scope:** `apps/daemon` only
+- **Scope:** `apps/daemon` only — daemon's own outbound dispatcher,
+  not children spawned by the daemon
 - **Builds on:** [001 — Daemon respects host HTTP_PROXY / HTTPS_PROXY](001-daemon-http-proxy-env.md)
+
+## 2026-05-09 revision — child-process leak fix
+
+Initial implementation mutated `process.env.HTTPS_PROXY` /
+`process.env.HTTP_PROXY` / `process.env.NO_PROXY` so that
+`EnvHttpProxyAgent` (which reads env at request time) would pick up
+detected system proxies "for free." The leak: the daemon also spawns
+local CLI agents (`claude`, `codex`, etc.) with
+`{ ...process.env, ... }`, so those children inherited the daemon's
+synthetic proxy env vars and were force-routed through the user's
+system proxy. When the system proxy didn't accept the CLI's traffic
+(common with Clash-style rules tuned for browsers), the smoke test
+under Settings → Configure execution mode → Local CLI → Test hung for
+the full 45s budget.
+
+Fix: `configureGlobalProxy()` now passes resolved proxy URLs directly
+to `new EnvHttpProxyAgent({ httpProxy, httpsProxy, noProxy })` and
+caches them in module state. `process.env` is left untouched, so
+spawned CLIs see exactly the env the user gave the OS.
 
 ## Rationale
 
@@ -56,15 +76,17 @@ those sources and bridging the result into `HTTPS_PROXY` / `HTTP_PROXY` /
 ## Modified
 
 - `apps/daemon/src/http-proxy.ts` — `configureGlobalProxy()` now
-  consults `detectSystemProxy()` when no proxy env var is set,
-  bridging the result into `process.env.HTTPS_PROXY` /
-  `process.env.HTTP_PROXY` / `process.env.NO_PROXY`. Startup log
-  reports `env` vs `system` as the proxy source.
+  consults `detectSystemProxy()` when no proxy env var is set, then
+  passes the resolved values directly to
+  `new EnvHttpProxyAgent({ httpProxy, httpsProxy, noProxy })`.
+  `process.env` is NOT mutated; resolved values are cached in module
+  state so `createOutboundDispatcher()` can reuse them too. Startup
+  log reports `env` vs `system` as the proxy source.
 - `apps/daemon/tests/http-proxy.test.ts` — mocks `system-proxy.js` via
   `vi.hoisted` so tests are host-independent (otherwise running tests
   on a developer's box with Clash's "system proxy" enabled would fail
-  the env-only no-op cases). Adds 3 new tests that exercise the env↔
-  system precedence and bridge.
+  the env-only no-op cases). Includes a regression guard asserting
+  `process.env` stays untouched when system proxy is detected.
 
 This file is also tracked in 001 — keep both entries in sync when
 either changes.
@@ -107,11 +129,14 @@ pnpm --filter @open-design/daemon exec vitest run tests/http-proxy.test.ts
 
 `tests/http-proxy.test.ts` adds:
 
-- bridges detected system proxy into `HTTPS_PROXY` / `HTTP_PROXY` and
-  preserves a system-supplied `noProxy`
-- falls back to loopback `NO_PROXY` when system proxy supplies none
+- detected system proxy installs an `EnvHttpProxyAgent` as the global
+  dispatcher **without** mutating `process.env` (regression guard for
+  the spawned-CLI leak fixed on 2026-05-09)
+- env-only configuration also leaves `process.env` untouched
 - does not consult system proxy when env vars already provide one
   (env wins, no `reg query` / `scutil` invocation)
+- `createOutboundDispatcher()` reuses the cached resolved proxy when
+  configureGlobalProxy() ran with system detection — no env reads
 
 ## Manual smoke
 
@@ -151,10 +176,14 @@ pnpm --filter @open-design/daemon exec vitest run tests/http-proxy.test.ts
 If upstream rewrites any of the touched files:
 
 1. **`apps/daemon/src/http-proxy.ts`** — keep the resolution order
-   `env > system > none`. The `applySystemProxyToEnv()` helper bridges
-   detection results into env vars *before* constructing
-   `EnvHttpProxyAgent`, so the existing dispatcher path remains the
-   single source of truth for how proxies are honored.
+   `env > system > none`. Resolved values flow into
+   `new EnvHttpProxyAgent({ httpProxy, httpsProxy, noProxy })`
+   constructor opts and a module-level `resolvedProxy` cache.
+   **Do not** re-introduce `process.env` mutation as a bridging
+   shortcut — children spawned by the daemon (`claude`, `codex`,
+   `cursor-agent`, etc.) must inherit a clean OS env, not the
+   daemon's synthetic proxy state. Re-introducing the mutation
+   re-introduces the 45s connectionTest hang.
 2. **`apps/daemon/src/system-proxy.ts`** — the file is self-contained
    and only depends on `node:child_process`. Parsers are pure; the
    `read*SystemProxy` functions are platform-guarded and silent on

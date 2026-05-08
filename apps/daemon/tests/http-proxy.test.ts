@@ -102,17 +102,26 @@ describe('http-proxy', () => {
 
   describe('configureGlobalProxy', () => {
     it('is a no-op when no proxy env is set and system proxy is not detected', () => {
+      const before = getGlobalDispatcher();
       configureGlobalProxy();
+      // No env mutation, no dispatcher swap.
       expect(process.env.NO_PROXY).toBeUndefined();
+      expect(getGlobalDispatcher()).toBe(before);
     });
 
-    it('defaults NO_PROXY to loopback when env proxy is set but NO_PROXY is not', () => {
+    it('installs an EnvHttpProxyAgent when HTTPS_PROXY is set, without mutating env', () => {
       process.env.HTTPS_PROXY = 'http://127.0.0.1:7890';
       configureGlobalProxy();
-      expect(process.env.NO_PROXY).toBe('localhost,127.0.0.1,::1');
+      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      // We must not invent a NO_PROXY or HTTP_PROXY entry on process.env
+      // — children spawned by the daemon (Claude CLI etc.) need an
+      // unmodified env. The dispatcher gets the loopback bypass via
+      // explicit constructor opts, not via env.
+      expect(process.env.NO_PROXY).toBeUndefined();
+      expect(process.env.HTTP_PROXY).toBeUndefined();
     });
 
-    it('preserves an explicit NO_PROXY', () => {
+    it('preserves an explicit NO_PROXY without mutating it', () => {
       process.env.HTTPS_PROXY = 'http://127.0.0.1:7890';
       process.env.NO_PROXY = '*.internal,10.0.0.0/8';
       configureGlobalProxy();
@@ -120,34 +129,40 @@ describe('http-proxy', () => {
     });
 
     it('only configures once even if called multiple times', () => {
+      const dispatcherBefore = getGlobalDispatcher();
       process.env.HTTPS_PROXY = 'http://127.0.0.1:7890';
       configureGlobalProxy();
-      const first = process.env.NO_PROXY;
-      process.env.NO_PROXY = 'changed-after-first-call';
+      const installed = getGlobalDispatcher();
+      expect(installed).toBeInstanceOf(EnvHttpProxyAgent);
+      expect(installed).not.toBe(dispatcherBefore);
+      // Second call is a latch no-op: dispatcher stays as the first install.
       configureGlobalProxy();
-      expect(process.env.NO_PROXY).toBe('changed-after-first-call');
-      expect(first).toBe('localhost,127.0.0.1,::1');
+      expect(getGlobalDispatcher()).toBe(installed);
     });
 
-    it('bridges detected system proxy into HTTPS_PROXY / HTTP_PROXY', () => {
+    it('bridges a detected system proxy into the dispatcher without mutating env', () => {
       detectSystemProxyMock.mockReturnValue({
         http: 'http://127.0.0.1:7890',
         https: 'http://127.0.0.1:7891',
         noProxy: '*.local,*.corp',
       });
       configureGlobalProxy();
-      expect(process.env.HTTPS_PROXY).toBe('http://127.0.0.1:7891');
-      expect(process.env.HTTP_PROXY).toBe('http://127.0.0.1:7890');
-      expect(process.env.NO_PROXY).toBe('*.local,*.corp');
+      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      // Critical regression guard: process.env stays untouched so spawned
+      // CLIs don't get force-routed through the user's system proxy.
+      expect(process.env.HTTPS_PROXY).toBeUndefined();
+      expect(process.env.HTTP_PROXY).toBeUndefined();
+      expect(process.env.NO_PROXY).toBeUndefined();
     });
 
-    it('falls back to loopback NO_PROXY when system proxy supplies none', () => {
+    it('installs a dispatcher when system proxy supplies https only', () => {
       detectSystemProxyMock.mockReturnValue({
         https: 'http://127.0.0.1:7890',
       });
       configureGlobalProxy();
-      expect(process.env.HTTPS_PROXY).toBe('http://127.0.0.1:7890');
-      expect(process.env.NO_PROXY).toBe('localhost,127.0.0.1,::1');
+      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      expect(process.env.HTTPS_PROXY).toBeUndefined();
+      expect(process.env.NO_PROXY).toBeUndefined();
     });
 
     it('does not consult system proxy when env vars already provide one', () => {
@@ -156,14 +171,8 @@ describe('http-proxy', () => {
         https: 'http://system-proxy:7890',
       });
       configureGlobalProxy();
-      expect(process.env.HTTPS_PROXY).toBe('http://env-proxy:9999');
-      expect(detectSystemProxyMock).not.toHaveBeenCalled();
-    });
-
-    it('installs an EnvHttpProxyAgent as the global undici dispatcher', () => {
-      process.env.HTTPS_PROXY = 'http://127.0.0.1:7890';
-      configureGlobalProxy();
       expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      expect(detectSystemProxyMock).not.toHaveBeenCalled();
     });
 
     it('leaves the global dispatcher untouched when no proxy is configured', () => {
@@ -172,12 +181,17 @@ describe('http-proxy', () => {
       expect(getGlobalDispatcher()).toBe(before);
     });
 
-    it('installs the global dispatcher even when proxy comes from system detection', () => {
+    it('createOutboundDispatcher reuses the system-detected proxy without env reads', () => {
       detectSystemProxyMock.mockReturnValue({
         https: 'http://127.0.0.1:7890',
       });
       configureGlobalProxy();
-      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      // process.env is clean, but createOutboundDispatcher should still
+      // know to route through the system proxy because configureGlobalProxy
+      // cached the resolved values.
+      const dispatcher = createOutboundDispatcher({ headersTimeout: 1000 });
+      expect(dispatcher).toBeInstanceOf(EnvHttpProxyAgent);
+      expect(process.env.HTTPS_PROXY).toBeUndefined();
     });
   });
 
