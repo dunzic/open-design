@@ -41,6 +41,7 @@ import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { type Dispatcher } from 'undici';
 import { createOutboundDispatcher } from './http-proxy.js';
 import {
   AUDIO_DURATIONS_SEC,
@@ -568,8 +569,8 @@ const OPENAI_IMAGE_BODY_TIMEOUT_MS = 10 * 60 * 1000;
 // proxy detection) — env vars are set after the global proxy resolution
 // runs, so we must defer construction until the proxy state is final.
 // Once built, the dispatcher is cached for the process lifetime.
-let _openAIImageDispatcher = null;
-function getOpenAIImageDispatcher() {
+let _openAIImageDispatcher: Dispatcher | null = null;
+function getOpenAIImageDispatcher(): Dispatcher {
   if (_openAIImageDispatcher == null) {
     _openAIImageDispatcher = createOutboundDispatcher({
       headersTimeout: OPENAI_IMAGE_HEADERS_TIMEOUT_MS,
