@@ -27,15 +27,9 @@ import type {
   LiveArtifactStatus,
   LiveArtifactSummary,
   MediaAspect,
-  OrbitRunSummary,
-  OrbitStatusResponse,
   ProjectDeploymentsResponse,
   ProviderTestRequest,
   PersistedAgentEvent,
-  ProviderModelOption,
-  ProviderModelsKind,
-  ProviderModelsRequest,
-  ProviderModelsResponse,
   Project,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
@@ -49,17 +43,12 @@ import type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
-  RenameProjectFileResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
-  InstallInput,
-  InstallSkillResponse,
-  InstallDesignSystemResponse,
-  UninstallResponse,
   UpdateDeployConfigRequest,
 } from '@open-design/contracts';
 
@@ -67,14 +56,12 @@ export type {
   CloudflarePagesDeploySelection,
   CloudflarePagesDeploymentInfo,
   CloudflarePagesZonesResponse,
-  OrbitRunSummary,
-  OrbitStatusResponse,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
+export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google';
 
 export type LiveArtifactTabId = `live:${string}`;
 export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
@@ -153,8 +140,6 @@ export interface MediaProviderCredentials {
   apiKey: string;
   baseUrl: string;
   model?: string;
-  apiKeyConfigured?: boolean;
-  apiKeyTail?: string;
 }
 
 export interface ApiProtocolConfig {
@@ -316,25 +301,12 @@ export interface AppConfig {
   // IDs of skills/design-systems the user has explicitly disabled.
   disabledSkills?: string[];
   disabledDesignSystems?: string[];
-  // Anonymous install identifier for telemetry. Generated locally the first
-  // time a user opts in via Settings → Privacy. `null` after the user
-  // explicitly opts out (or rotates "Delete my data"); `undefined` when the
-  // daemon has not assigned an anonymous id yet.
-  installationId?: string | null;
-  // Unix-millis timestamp recording that the first-run privacy prompt was
-  // resolved. This is independent from installationId so Delete my data can
-  // rotate or clear the anonymous id without re-opening the consent banner.
-  privacyDecisionAt?: number | null;
-  // Privacy preferences governing what (if anything) is shipped to the
-  // Langfuse-backed telemetry endpoint. All three default to off until the
-  // user makes an explicit choice.
-  telemetry?: TelemetryConfig;
-}
-
-export interface TelemetryConfig {
-  metrics?: boolean;
-  content?: boolean;
-  artifactManifest?: boolean;
+  // Fork-only (custom/004): when true, daemon routes outbound HTTP and
+  // spawned CLI children through a hardcoded local proxy at
+  // http://127.0.0.1:7890. Toggled from the Settings dialog button next
+  // to "Test"; persisted server-side via /api/app-config so it survives
+  // daemon restarts.
+  manualProxyEnabled?: boolean;
 }
 
 export interface ComposioSettings {
@@ -434,22 +406,13 @@ export type {
   ProjectKind,
   ProjectMetadata,
   ProjectTemplate,
-  RenameProjectFileResponse,
   ProviderTestRequest,
-  ProviderModelOption,
-  ProviderModelsKind,
-  ProviderModelsRequest,
-  ProviderModelsResponse,
   CodexPetSummary,
   CodexPetsResponse,
   SyncCommunityPetsRequest,
   SyncCommunityPetsResponse,
   SkillDetail,
   SkillSummary,
-  InstallInput,
-  InstallSkillResponse,
-  InstallDesignSystemResponse,
-  UninstallResponse,
   UpdateDeployConfigRequest,
 };
 

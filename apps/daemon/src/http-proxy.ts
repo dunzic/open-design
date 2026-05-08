@@ -52,6 +52,20 @@ interface ResolvedProxy {
 
 const DEFAULT_NO_PROXY = 'localhost,127.0.0.1,::1';
 
+// Hardcoded "manual proxy" — fork-only (custom/004). Targets the
+// Clash/Surge/Mihomo default local mixed port. The Settings dialog
+// renders a toggle next to the Test button; flipping it on calls
+// `setManualProxyEnabled(true)` here, which swaps the global undici
+// dispatcher in real time and starts propagating HTTPS_PROXY /
+// HTTP_PROXY / NO_PROXY into spawned CLI children (so Claude Code etc.
+// also egress through the proxy). Flipping it off restores the
+// env/system auto-detection path.
+const MANUAL_PROXY: ResolvedProxy = {
+  http: 'http://127.0.0.1:7890',
+  https: 'http://127.0.0.1:7890',
+  noProxy: DEFAULT_NO_PROXY,
+};
+
 function readProxyEnv(): ProxyEnv {
   return {
     https: process.env.HTTPS_PROXY ?? process.env.https_proxy,
@@ -84,10 +98,16 @@ export function maskProxyUrl(url: string | undefined): string | undefined {
 
 let configured = false;
 let resolvedProxy: ResolvedProxy | null = null;
-let resolvedSource: 'env' | 'system' | 'none' = 'none';
+let resolvedSource: 'env' | 'system' | 'manual' | 'none' = 'none';
+let manualProxyEnabled = false;
+// Tracks whether we've ever swapped the global undici dispatcher. Lets
+// us undo back to a vanilla Agent if the user disables manual proxy
+// after we'd installed an EnvHttpProxyAgent, while leaving the
+// global dispatcher untouched in the steady-state no-proxy boot path.
+let installedOurDispatcher = false;
 
 export interface ProxySnapshot {
-  source: 'env' | 'system' | 'none';
+  source: 'env' | 'system' | 'manual' | 'none';
   http?: string;
   https?: string;
   noProxy?: string;
@@ -123,11 +143,18 @@ export function snapshotResolvedProxy(): ProxySnapshot {
 }
 
 // Returns env-var-shaped proxy entries for use when the daemon spawns
-// a child process and the user has opted into proxy propagation
-// (`OD_PROPAGATE_PROXY_TO_AGENTS=true`). Default behavior is to NOT
-// propagate — see the file header for the rationale.
+// a child process. Empty unless the daemon has resolved a proxy AND
+// either the user has opted into propagation (`OD_PROPAGATE_PROXY_TO_AGENTS=true`)
+// or the proxy came from the manual Settings toggle (an explicit user
+// gesture — propagation is the whole point of flipping that switch).
+// Auto-detected env / system proxy stays daemon-only by default to
+// avoid the regression where Clash-style rules break agent CLI traffic.
 export function proxyEnvForChild(): Record<string, string> {
   if (!resolvedProxy) return {};
+  const optedIn =
+    resolvedSource === 'manual' ||
+    process.env.OD_PROPAGATE_PROXY_TO_AGENTS === 'true';
+  if (!optedIn) return {};
   const out: Record<string, string> = {};
   if (resolvedProxy.https) out.HTTPS_PROXY = resolvedProxy.https;
   if (resolvedProxy.http) out.HTTP_PROXY = resolvedProxy.http;
@@ -136,9 +163,17 @@ export function proxyEnvForChild(): Record<string, string> {
 }
 
 function resolveProxy(): {
-  source: 'env' | 'system' | 'none';
+  source: 'env' | 'system' | 'manual' | 'none';
   proxy: ResolvedProxy | null;
 } {
+  // Manual override (the Settings toggle) wins over everything: when
+  // the user explicitly says "use the local proxy", honor that even if
+  // env vars or system settings disagree. The auto-detect paths only
+  // run when manual is off.
+  if (manualProxyEnabled) {
+    return { source: 'manual', proxy: { ...MANUAL_PROXY } };
+  }
+
   const env = readProxyEnv();
   if (env.https || env.http || env.all) {
     const proxy: ResolvedProxy = { noProxy: env.no ?? DEFAULT_NO_PROXY };
@@ -160,25 +195,57 @@ function resolveProxy(): {
   return { source: 'none', proxy: null };
 }
 
-export function configureGlobalProxy(): void {
-  if (configured) return;
-  configured = true;
-
+// Applies whatever resolveProxy() returns to the global undici
+// dispatcher. When no proxy is resolved AND we haven't installed our
+// own dispatcher yet, leaves the global dispatcher alone — the
+// boot-time no-proxy path stays a no-op so we don't perturb undici's
+// default. When transitioning from a previously-installed proxy
+// dispatcher back to no-proxy (e.g. user disables the toggle), reset
+// to a vanilla Agent so the proxy dispatcher doesn't leak.
+function installResolved(): void {
   const { source, proxy } = resolveProxy();
   resolvedProxy = proxy;
   resolvedSource = source;
-  if (!proxy) return;
+  if (proxy) {
+    setGlobalDispatcher(new EnvHttpProxyAgent(envProxyAgentOpts(proxy)));
+    installedOurDispatcher = true;
+    console.log(`[proxy] outbound fetch will use ${source} proxy`, {
+      https: maskProxyUrl(proxy.https),
+      http: maskProxyUrl(proxy.http),
+      no: proxy.noProxy,
+    });
+    return;
+  }
+  if (installedOurDispatcher) {
+    setGlobalDispatcher(new Agent());
+    installedOurDispatcher = false;
+    console.log('[proxy] outbound fetch will go direct (no proxy)');
+  }
+}
 
-  // Pass proxy URLs explicitly so EnvHttpProxyAgent doesn't fall back to
-  // reading process.env at request time. Children spawned later in the
-  // daemon (CLI agents) get an unmodified env from the OS.
-  setGlobalDispatcher(new EnvHttpProxyAgent(envProxyAgentOpts(proxy)));
+/**
+ * Toggles the fork-only manual proxy. Re-resolves the dispatcher
+ * immediately so the change takes effect without a daemon restart.
+ * Called from /api/app-config when manualProxyEnabled flips and
+ * once at boot from cli.ts after reading persisted config.
+ */
+export function setManualProxyEnabled(enabled: boolean): void {
+  if (manualProxyEnabled === enabled && configured) return;
+  manualProxyEnabled = enabled;
+  configured = true;
+  installResolved();
+}
 
-  console.log(`[proxy] outbound fetch will use ${source} proxy`, {
-    https: maskProxyUrl(proxy.https),
-    http: maskProxyUrl(proxy.http),
-    no: proxy.noProxy,
-  });
+/** Read-only — used by the Settings UI / diagnostics to render the
+ *  toggle's current state without re-deriving it. */
+export function isManualProxyEnabled(): boolean {
+  return manualProxyEnabled;
+}
+
+export function configureGlobalProxy(): void {
+  if (configured) return;
+  configured = true;
+  installResolved();
 }
 
 // EnvHttpProxyAgent forwards Agent.Options to the inner Agent / ProxyAgent
@@ -223,4 +290,6 @@ export function __resetGlobalProxyForTests(): void {
   configured = false;
   resolvedProxy = null;
   resolvedSource = 'none';
+  manualProxyEnabled = false;
+  installedOurDispatcher = false;
 }

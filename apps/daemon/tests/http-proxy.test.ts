@@ -24,8 +24,11 @@ import {
   __resetGlobalProxyForTests,
   configureGlobalProxy,
   createOutboundDispatcher,
+  isManualProxyEnabled,
   isProxyEnvConfigured,
   maskProxyUrl,
+  proxyEnvForChild,
+  setManualProxyEnabled,
 } from '../src/http-proxy.js';
 
 const PROXY_KEYS = [
@@ -192,6 +195,68 @@ describe('http-proxy', () => {
       const dispatcher = createOutboundDispatcher({ headersTimeout: 1000 });
       expect(dispatcher).toBeInstanceOf(EnvHttpProxyAgent);
       expect(process.env.HTTPS_PROXY).toBeUndefined();
+    });
+  });
+
+  describe('manual proxy toggle (custom/004)', () => {
+    it('flips the global dispatcher to EnvHttpProxyAgent when enabled', () => {
+      const before = getGlobalDispatcher();
+      setManualProxyEnabled(true);
+      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      expect(getGlobalDispatcher()).not.toBe(before);
+      expect(isManualProxyEnabled()).toBe(true);
+      // process.env stays clean — the dispatcher knows the proxy URL via
+      // explicit constructor opts, not env vars.
+      expect(process.env.HTTPS_PROXY).toBeUndefined();
+    });
+
+    it('falls back to a vanilla Agent when toggled off after being on', () => {
+      setManualProxyEnabled(true);
+      expect(getGlobalDispatcher()).toBeInstanceOf(EnvHttpProxyAgent);
+      setManualProxyEnabled(false);
+      expect(getGlobalDispatcher()).toBeInstanceOf(Agent);
+      expect(getGlobalDispatcher()).not.toBeInstanceOf(EnvHttpProxyAgent);
+      expect(isManualProxyEnabled()).toBe(false);
+    });
+
+    it('manual override beats env vars in the resolution order', () => {
+      process.env.HTTPS_PROXY = 'http://env-proxy:9999';
+      setManualProxyEnabled(true);
+      // Children spawned at this point should see the manual URL, not
+      // env-proxy:9999, because manual is the authoritative source.
+      const childEnv = proxyEnvForChild();
+      expect(childEnv.HTTPS_PROXY).toBe('http://127.0.0.1:7890');
+      expect(childEnv.HTTPS_PROXY).not.toContain('env-proxy');
+    });
+
+    it('proxyEnvForChild is empty by default and populated when manual is on', () => {
+      // Off + no env: nothing to inject (children stay clean).
+      expect(proxyEnvForChild()).toEqual({});
+      // On: explicit user gesture means propagate to spawn env.
+      setManualProxyEnabled(true);
+      const env = proxyEnvForChild();
+      expect(env.HTTPS_PROXY).toBe('http://127.0.0.1:7890');
+      expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890');
+      expect(env.NO_PROXY).toBe('localhost,127.0.0.1,::1');
+    });
+
+    it('proxyEnvForChild stays empty for env-detected proxy (no opt-in)', () => {
+      // Env-source proxy without OD_PROPAGATE_PROXY_TO_AGENTS shouldn't
+      // leak into children — that was the custom/002 regression.
+      process.env.HTTPS_PROXY = 'http://env-proxy:9999';
+      configureGlobalProxy();
+      expect(proxyEnvForChild()).toEqual({});
+    });
+
+    it('OD_PROPAGATE_PROXY_TO_AGENTS=true also enables child propagation', () => {
+      process.env.HTTPS_PROXY = 'http://env-proxy:9999';
+      process.env.OD_PROPAGATE_PROXY_TO_AGENTS = 'true';
+      configureGlobalProxy();
+      try {
+        expect(proxyEnvForChild().HTTPS_PROXY).toBe('http://env-proxy:9999');
+      } finally {
+        delete process.env.OD_PROPAGATE_PROXY_TO_AGENTS;
+      }
     });
   });
 
