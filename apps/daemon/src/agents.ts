@@ -11,6 +11,7 @@ import {
 } from '@open-design/platform';
 import { detectAcpModels } from './acp.js';
 import { parsePiModels } from './pi-rpc.js';
+import { proxyEnvForChild } from './http-proxy.js';
 
 const execFileP = promisify(execFile);
 
@@ -1353,6 +1354,26 @@ export function resolveAgentBin(id, configuredEnv = {}) {
 // the child. Iterate keys and compare case-insensitively to close that.
 export function spawnEnvForAgent(agentId, baseEnv, configuredEnv = {}) {
   const env = { ...baseEnv, ...expandConfiguredEnv(configuredEnv) };
+  // Opt-in proxy propagation. Default behavior is to NOT inject the
+  // daemon's resolved proxy into spawned CLI children — that was the
+  // 002 regression (Clash etc. break agent CLI traffic). Users who
+  // genuinely need the CLI to honor the same proxy as the daemon
+  // (typical when behind GFW with no direct egress to api.anthropic.com)
+  // set OD_PROPAGATE_PROXY_TO_AGENTS=true. Existing HTTPS_PROXY /
+  // HTTP_PROXY / NO_PROXY values in the user's OS env still win and
+  // are not overwritten.
+  if (process.env.OD_PROPAGATE_PROXY_TO_AGENTS === 'true') {
+    const proxyEnv = proxyEnvForChild();
+    for (const [key, value] of Object.entries(proxyEnv)) {
+      const alreadySet = Object.keys(env).some(
+        (k) =>
+          k.toUpperCase() === key.toUpperCase() &&
+          typeof env[k] === 'string' &&
+          env[k].trim() !== '',
+      );
+      if (!alreadySet) env[key] = value;
+    }
+  }
   if (agentId !== 'claude') return env;
   const hasCustomBaseUrl = Object.keys(env).some(
     (k) =>

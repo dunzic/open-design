@@ -84,6 +84,56 @@ export function maskProxyUrl(url: string | undefined): string | undefined {
 
 let configured = false;
 let resolvedProxy: ResolvedProxy | null = null;
+let resolvedSource: 'env' | 'system' | 'none' = 'none';
+
+export interface ProxySnapshot {
+  source: 'env' | 'system' | 'none';
+  http?: string;
+  https?: string;
+  noProxy?: string;
+}
+
+// Returns the daemon's currently-resolved outbound proxy config in a
+// shape safe for diagnostics (credentials masked). Used by the
+// connectionTest error path so the user can see *why* the daemon
+// thinks there's a proxy in play (or why there isn't).
+export function snapshotResolvedProxy(): ProxySnapshot {
+  if (resolvedProxy && resolvedSource !== 'none') {
+    const out: ProxySnapshot = { source: resolvedSource };
+    const httpsMasked = maskProxyUrl(resolvedProxy.https);
+    const httpMasked = maskProxyUrl(resolvedProxy.http);
+    if (httpsMasked) out.https = httpsMasked;
+    if (httpMasked) out.http = httpMasked;
+    if (resolvedProxy.noProxy) out.noProxy = resolvedProxy.noProxy;
+    return out;
+  }
+  // configureGlobalProxy() may not have run yet (some test paths reach
+  // diagnostics before boot). Fall back to a direct env read.
+  const env = readProxyEnv();
+  if (env.https || env.http || env.all) {
+    const out: ProxySnapshot = { source: 'env' };
+    const httpsMasked = maskProxyUrl(env.https ?? env.all);
+    const httpMasked = maskProxyUrl(env.http ?? env.all);
+    if (httpsMasked) out.https = httpsMasked;
+    if (httpMasked) out.http = httpMasked;
+    if (env.no) out.noProxy = env.no;
+    return out;
+  }
+  return { source: 'none' };
+}
+
+// Returns env-var-shaped proxy entries for use when the daemon spawns
+// a child process and the user has opted into proxy propagation
+// (`OD_PROPAGATE_PROXY_TO_AGENTS=true`). Default behavior is to NOT
+// propagate — see the file header for the rationale.
+export function proxyEnvForChild(): Record<string, string> {
+  if (!resolvedProxy) return {};
+  const out: Record<string, string> = {};
+  if (resolvedProxy.https) out.HTTPS_PROXY = resolvedProxy.https;
+  if (resolvedProxy.http) out.HTTP_PROXY = resolvedProxy.http;
+  if (resolvedProxy.noProxy) out.NO_PROXY = resolvedProxy.noProxy;
+  return out;
+}
 
 function resolveProxy(): {
   source: 'env' | 'system' | 'none';
@@ -116,6 +166,7 @@ export function configureGlobalProxy(): void {
 
   const { source, proxy } = resolveProxy();
   resolvedProxy = proxy;
+  resolvedSource = source;
   if (!proxy) return;
 
   // Pass proxy URLs explicitly so EnvHttpProxyAgent doesn't fall back to
@@ -171,4 +222,5 @@ function envProxyAgentOpts(
 export function __resetGlobalProxyForTests(): void {
   configured = false;
   resolvedProxy = null;
+  resolvedSource = 'none';
 }

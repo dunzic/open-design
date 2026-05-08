@@ -768,12 +768,13 @@ setTimeout(() => {
           body: JSON.stringify({ mode: 'agent', agentId: 'codex' }),
         });
         expect(res.status).toBe(200);
-        await expect(res.json()).resolves.toMatchObject({
+        const body = await res.json();
+        expect(body).toMatchObject({
           ok: false,
           kind: 'agent_spawn_failed',
           agentName: 'Codex CLI',
-          detail: 'late failure after ok',
         });
+        expect(body.detail).toContain('late failure after ok');
       },
     );
   });
@@ -889,12 +890,13 @@ setTimeout(() => process.exit(0), 50);
           body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
         });
         expect(res.status).toBe(200);
-        await expect(res.json()).resolves.toMatchObject({
+        const body = await res.json();
+        expect(body).toMatchObject({
           ok: false,
           kind: 'agent_spawn_failed',
           agentName: 'OpenCode',
-          detail: 'OpenCode auth failed: login required',
         });
+        expect(body.detail).toContain('OpenCode auth failed: login required');
       },
     );
   });
