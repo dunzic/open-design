@@ -804,8 +804,16 @@ export function SettingsDialog({
         return t('settings.testRateLimited');
       case 'upstream_unavailable':
         return t('settings.testUpstream', { status: result.status ?? 0 });
-      case 'timeout':
-        return t('settings.testTimeout', { ms });
+      case 'timeout': {
+        const base = t('settings.testTimeout', { ms });
+        // The daemon attaches a multi-line diagnostic block (resolved
+        // proxy, spawned bin, manual replay command, stderr/stdout
+        // tails) to result.detail when an agent test times out. Without
+        // this, users see only "Test timed out after 45047 ms." with no
+        // signal about what to fix. The <p> render is styled with
+        // whiteSpace: pre-wrap so the embedded newlines survive.
+        return result.detail ? `${base}\n\n${result.detail}` : base;
+      }
       case 'agent_not_installed':
         return t('settings.testAgentMissing', { agentName });
       case 'agent_spawn_failed':
@@ -1393,6 +1401,7 @@ export function SettingsDialog({
                     testStatusVariant(agentTestState.result)
                   }
                   role={agentTestState.result.ok ? 'status' : 'alert'}
+                  style={{ whiteSpace: 'pre-wrap' }}
                 >
                   {renderTestMessage(agentTestState.result, 'cli')}
                 </p>
@@ -1652,6 +1661,7 @@ export function SettingsDialog({
                     testStatusVariant(providerTestState.result)
                   }
                   role={providerTestState.result.ok ? 'status' : 'alert'}
+                  style={{ whiteSpace: 'pre-wrap' }}
                 >
                   {renderTestMessage(providerTestState.result, 'api')}
                 </p>
