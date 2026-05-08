@@ -219,6 +219,31 @@ export const AGENT_DEFS = [
       args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
+    // Smoke-test variant: appends the prompt as a positional argv entry
+    // instead of relying on stdin. The native (Bun-compiled) `claude.EXE`
+    // shipped via the curl-installer at ~/.local/bin has a Windows-only
+    // hang when invoked from Node child_process with a piped stdin: Node's
+    // `child.stdin.end()` doesn't surface as EOF to the Bun runtime, so
+    // the binary blocks forever on its prompt read while its stdout
+    // buffer never flushes (PowerShell pipes work fine — only Node
+    // pipes hit this). The smoke prompt is "Reply with only: ok" — a
+    // few dozen bytes, well under the Windows CreateProcess 32 KB
+    // command-line cap when the resolved bin is a real `.exe` (not a
+    // `.cmd` shim, which has its own ~8 KB cap), so passing it inline
+    // is safe. Real chat runs continue to use stdin via buildArgs
+    // because real prompts routinely exceed argv limits. The smoke
+    // path is the only place this matters.
+    buildSmokeArgs: (prompt, options = {}) => {
+      const caps = agentCapabilities.get('claude') || {};
+      const args = ['-p', '--output-format', 'stream-json', '--verbose'];
+      if (caps.partialMessages) args.push('--include-partial-messages');
+      if (options.model && options.model !== 'default') {
+        args.push('--model', options.model);
+      }
+      args.push('--permission-mode', 'bypassPermissions');
+      args.push(prompt);
+      return args;
+    },
     promptViaStdin: true,
     streamFormat: 'claude-stream-json',
   },

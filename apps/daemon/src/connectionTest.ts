@@ -1015,15 +1015,27 @@ export async function testAgentConnection(
     };
   };
 
+  // If the agent ships a `buildSmokeArgs` adapter, the smoke prompt
+  // travels as a positional argv entry instead of via stdin. Used by
+  // the claude adapter to sidestep a Bun-compiled-EXE-on-Windows hang
+  // where Node's piped stdin EOF never reaches the child. The real
+  // chat path (server.ts startChatRun) still goes through buildArgs +
+  // stdin, since real prompts may exceed argv limits.
+  const useSmokeArgsPath = typeof def.buildSmokeArgs === 'function';
   try {
     try {
-      cliArgs = def.buildArgs(
-        SMOKE_PROMPT,
-        [],
-        [],
-        { model: input.model ?? null, reasoning: input.reasoning ?? null },
-        { cwd: tempDir },
-      );
+      cliArgs = useSmokeArgsPath
+        ? def.buildSmokeArgs(SMOKE_PROMPT, {
+            model: input.model ?? null,
+            reasoning: input.reasoning ?? null,
+          })
+        : def.buildArgs(
+            SMOKE_PROMPT,
+            [],
+            [],
+            { model: input.model ?? null, reasoning: input.reasoning ?? null },
+            { cwd: tempDir },
+          );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return {
@@ -1036,8 +1048,12 @@ export async function testAgentConnection(
       };
     }
     const args = cliArgs;
+    const promptOnStdin =
+      !useSmokeArgsPath &&
+      Boolean(def.promptViaStdin) &&
+      def.streamFormat !== 'pi-rpc';
     const stdinMode =
-      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      promptOnStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
     const env = spawnEnvForAgent(
       input.agentId,
       {
@@ -1132,7 +1148,7 @@ export async function testAgentConnection(
       };
     };
 
-    if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
+    if (promptOnStdin && child.stdin) {
       child.stdin.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code !== 'EPIPE') {
           sink.send('error', {

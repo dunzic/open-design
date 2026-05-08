@@ -768,7 +768,7 @@ setTimeout(() => {
           body: JSON.stringify({ mode: 'agent', agentId: 'codex' }),
         });
         expect(res.status).toBe(200);
-        const body = await res.json();
+        const body = (await res.json()) as { detail?: string };
         expect(body).toMatchObject({
           ok: false,
           kind: 'agent_spawn_failed',
@@ -890,7 +890,7 @@ setTimeout(() => process.exit(0), 50);
           body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
         });
         expect(res.status).toBe(200);
-        const body = await res.json();
+        const body = (await res.json()) as { detail?: string };
         expect(body).toMatchObject({
           ok: false,
           kind: 'agent_spawn_failed',
