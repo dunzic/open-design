@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import type { ChatMessage } from '../../src/types';
 
@@ -23,6 +23,7 @@ import type { ChatMessage } from '../../src/types';
 // through this single test-controlled geometry.
 type Geom = { scrollHeight: number; clientHeight: number; scrollTop: number };
 let geom: Geom;
+let rafCallbacks: FrameRequestCallback[] = [];
 let savedDescriptors: Record<
   'scrollTop' | 'scrollHeight' | 'clientHeight',
   PropertyDescriptor | undefined
@@ -34,6 +35,11 @@ function isChatLog(el: HTMLElement): boolean {
 
 beforeEach(() => {
   geom = { scrollHeight: 0, clientHeight: 0, scrollTop: 0 };
+  rafCallbacks = [];
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    rafCallbacks.push(callback);
+    return rafCallbacks.length;
+  });
   savedDescriptors = {
     scrollTop: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop'),
     scrollHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight'),
@@ -64,6 +70,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  rafCallbacks = [];
   for (const key of ['scrollTop', 'scrollHeight', 'clientHeight'] as const) {
     const original = savedDescriptors[key];
     if (original) {
@@ -114,9 +122,12 @@ const sampleMessages: ChatMessage[] = [
   { id: 'a2', role: 'assistant', content: 'second reply', createdAt: Date.now() },
 ];
 
-function flushFrame() {
-  return act(async () => {
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+async function flushFrame() {
+  await act(async () => {
+    const callbacks = rafCallbacks;
+    rafCallbacks = [];
+    callbacks.forEach((callback) => callback(performance.now()));
+    await Promise.resolve();
   });
 }
 
