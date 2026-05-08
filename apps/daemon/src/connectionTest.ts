@@ -25,6 +25,7 @@ import {
   resolveAgentBin,
   spawnEnvForAgent,
 } from './agents.js';
+import { snapshotResolvedProxy } from './http-proxy.js';
 import { createCommandInvocation } from '@open-design/platform';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
@@ -862,6 +863,64 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+// Quote one PowerShell argv token. Embeds double quotes by escaping them
+// with a backtick (PowerShell's escape char). We don't try to be exhaustive
+// — this string is shown to the user so they can paste it manually, not
+// piped through a parser.
+function quoteForPowerShell(value: string): string {
+  if (value === '') return '""';
+  if (!/[\s"'`$&|<>;]/.test(value)) return value;
+  return `"${value.replace(/"/g, '`"')}"`;
+}
+
+// Builds a PowerShell-shaped command line the user can paste into a
+// terminal to reproduce the exact spawn the daemon attempted. Uses the
+// `'Reply with only: ok' | <bin> <args>` shape so they see the same
+// stdin-driven invocation the daemon used.
+function buildReplayCommand(bin: string, args: string[]): string {
+  const argv = args.map(quoteForPowerShell).join(' ');
+  return `'${SMOKE_PROMPT}' | ${quoteForPowerShell(bin)} ${argv}`.trim();
+}
+
+// Builds the diagnostic detail block surfaced when an agent test fails
+// (timeout, no-text exit, spawn error). Includes:
+//   - resolved daemon-side proxy state
+//   - the exact bin + args that were spawned
+//   - a manual replay command the user can run themselves
+//   - tails of stdout / stderr captured before the test gave up
+// The intent is to give the user enough signal to diagnose without
+// having to find the daemon log file.
+function buildAgentFailureDetail(args: {
+  resolvedBin: string;
+  cliArgs: string[];
+  stderrTail: string;
+  stdoutTail: string;
+  reason: string;
+}): string {
+  const proxy = snapshotResolvedProxy();
+  const proxyLine =
+    proxy.source === 'none'
+      ? 'Daemon proxy: none detected'
+      : `Daemon proxy (${proxy.source}): https=${proxy.https ?? '-'} http=${proxy.http ?? '-'} no_proxy=${proxy.noProxy ?? '-'}`;
+  const propagated = process.env.OD_PROPAGATE_PROXY_TO_AGENTS === 'true';
+  const propagatedLine = `OD_PROPAGATE_PROXY_TO_AGENTS=${propagated ? 'true (proxy passed to CLI)' : 'false (CLI uses OS env only)'}`;
+  const cmd = buildReplayCommand(args.resolvedBin, args.cliArgs);
+  const lines = [
+    args.reason,
+    proxyLine,
+    propagatedLine,
+    `Spawned: ${args.resolvedBin}`,
+    `Replay manually: ${cmd}`,
+  ];
+  if (args.stderrTail) {
+    lines.push(`stderr (tail): ${args.stderrTail.slice(-300)}`);
+  }
+  if (args.stdoutTail) {
+    lines.push(`stdout (tail): ${args.stdoutTail.slice(-300)}`);
+  }
+  return lines.join('\n');
+}
+
 export async function testAgentConnection(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
@@ -902,7 +961,20 @@ export async function testAgentConnection(
   let childClosed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
+  // Captured during the spawn block so the cancellation / no-text /
+  // spawn-error paths can build a diagnostic detail block referencing
+  // the exact argv the daemon used.
+  let cliArgs: string[] = [];
   const sink = createAgentSink();
+
+  const failureDetail = (reason: string): string =>
+    buildAgentFailureDetail({
+      resolvedBin,
+      cliArgs,
+      stderrTail: sink.getStderrTail(),
+      stdoutTail: sink.getText(),
+      reason,
+    });
 
   const resultFromAgentText = (text: string): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
@@ -940,32 +1012,28 @@ export async function testAgentConnection(
 
   const resultFromStreamError = (error: unknown): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
-    const detail = redactSecrets(
+    const errMsg = redactSecrets(
       error instanceof Error ? error.message : String(error),
     );
-    if (detail && isLikelyModelErrorText(detail)) {
-      console.warn(
-        `[test:agent] ${def.name} → not_found_model: ${detail}`,
-      );
+    if (errMsg && isLikelyModelErrorText(errMsg)) {
+      console.warn(`[test:agent] ${def.name} → not_found_model: ${errMsg}`);
       return {
         ok: false,
         kind: 'not_found_model',
         latencyMs,
         model,
         agentName: def.name,
-        detail,
+        detail: errMsg,
       };
     }
-    console.warn(
-      `[test:agent] ${def.name} → stream_error: ${detail}`,
-    );
+    console.warn(`[test:agent] ${def.name} → stream_error: ${errMsg}`);
     return {
       ok: false,
       kind: 'agent_spawn_failed',
       latencyMs,
       model,
       agentName: def.name,
-      detail,
+      detail: failureDetail(`Stream error: ${errMsg}`),
     };
   };
 
@@ -973,20 +1041,26 @@ export async function testAgentConnection(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
-    console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
+    console.warn(
+      `[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`,
+    );
+    const reason =
+      kind === 'timeout'
+        ? `Agent CLI did not produce a recognizable assistant reply within ${Math.round(AGENT_TIMEOUT_MS / 1000)}s.`
+        : 'Test was aborted.';
     return {
       ok: false,
       kind: 'timeout',
       latencyMs,
       model,
       agentName: def.name,
+      detail: failureDetail(reason),
     };
   };
 
   try {
-    let args: string[];
     try {
-      args = def.buildArgs(
+      cliArgs = def.buildArgs(
         SMOKE_PROMPT,
         [],
         [],
@@ -1004,6 +1078,7 @@ export async function testAgentConnection(
         detail: redactSecrets(detail),
       };
     }
+    const args = cliArgs;
     const stdinMode =
       def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
     const env = spawnEnvForAgent(
@@ -1051,19 +1126,17 @@ export async function testAgentConnection(
     ): ConnectionTestResponse => {
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
-        const detail = redactSecrets(winner.error.message);
+        const errMsg = redactSecrets(winner.error.message);
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
         const isMissing = errnoCode === 'ENOENT';
-        console.warn(
-          `[test:agent] ${def.name} → spawn_failed: ${detail}`,
-        );
+        console.warn(`[test:agent] ${def.name} → spawn_failed: ${errMsg}`);
         return {
           ok: false,
           kind: isMissing ? 'agent_not_installed' : 'agent_spawn_failed',
           latencyMs,
           model,
           agentName: def.name,
-          detail,
+          detail: failureDetail(`Spawn failed: ${errMsg}`),
         };
       }
 
@@ -1077,21 +1150,20 @@ export async function testAgentConnection(
         }
         if (exitedCleanly) return resultFromAgentText(buffered);
       }
-      const stderrTail = sink.getStderrTail().trim();
       const acpFatal = Boolean(acpSession?.hasFatalError?.());
-      const detail = redactSecrets(
-        [
-          winner.code != null ? `exit ${winner.code}` : null,
-          winner.signal ? `signal ${winner.signal}` : null,
-          stderrTail ? `stderr: ${stderrTail.slice(-200)}` : null,
-          buffered ? `stdout: ${buffered.slice(-200)}` : null,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-      );
+      const exitTag = [
+        winner.code != null ? `exit ${winner.code}` : null,
+        winner.signal ? `signal ${winner.signal}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const reason = buffered
+        ? `Agent CLI exited (${exitTag || 'no code'}) without producing a recognizable assistant reply.`
+        : `Agent CLI exited (${exitTag || 'no code'}) without writing to stdout.`;
+      const detail = failureDetail(reason);
       const label = buffered ? 'exit_failed' : 'no_text';
       console.warn(
-        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'})`,
+        `[test:agent] ${def.name} → ${label} (${exitTag || 'no detail'})`,
       );
       return {
         ok: false,
