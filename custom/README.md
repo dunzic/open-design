@@ -24,9 +24,9 @@ folder tells you why we touched it and how to re-apply.
 | 002 | [Daemon detects OS system proxy (Windows registry / macOS scutil)](002-daemon-system-proxy-detection.md) | 2026-05-08 | Active |
 
 
-## Merge policy — **三原则**
+## Merge policy — **四原则**
 
-When merging from upstream (nexu-io/open-design ), apply these three
+When merging from upstream (nexu-io/open-design ), apply these four
 principles in order. They resolve every routine merge decision; anything
 that doesn't fit gets escalated as a new `custom/NNN-*.md` requirement.
 
@@ -57,7 +57,28 @@ forward-compatible additions (new tables, new API endpoints, new
 frontend modules) are immediately available if a customization later
 wants to build on them.
 
-### 3. 每次合并必须验证 (verify after every merge)
+### 3. 版本标签同步 (sync version tags from upstream)
+
+After every merge from upstream, version tags must be brought across so
+the fork's release history stays aligned with `nexu-io/open-design`. We
+do not author independent `vX.Y.Z` tags on the fork — upstream is the
+source of truth for the versioning timeline.
+
+```bash
+# fetch new tags upstream has cut since our last merge
+git fetch upstream --tags
+
+# push them to our origin so the fork mirrors upstream's release set
+git push origin --tags
+```
+
+If upstream renames or force-moves an existing tag (rare), do NOT
+silently overwrite ours — investigate first, then update with an
+explicit `git push origin --tags --force` only after confirming the
+upstream move was intentional. Document any divergence as a new
+`custom/NNN-*.md` requirement before proceeding.
+
+### 4. 每次合并必须验证 (verify after every merge)
 
 After resolving conflicts and before declaring the merge done, run the
 **post-merge self-test**:
