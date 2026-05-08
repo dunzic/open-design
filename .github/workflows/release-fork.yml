@@ -1,0 +1,323 @@
+name: release-fork
+
+# Downstream-only release pipeline for the dunzic/open-design fork.
+# Tracked under custom/003-fork-release-workflow.md.
+#
+# - workflow_dispatch only (no push triggers)
+# - builds installers via `pnpm tools-pack {mac,win,linux} build`
+# - skips Cloudflare R2 publish, mac notarization, and code signing
+# - attaches artifacts to a GitHub Release on this fork
+#
+# Resulting installers will be UNSIGNED. End users will see Gatekeeper
+# warnings on macOS and SmartScreen warnings on Windows the first time
+# they run the binary; that is a deliberate tradeoff for a fork that
+# does not own the signing certificates.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.5.1-fork.1 (drives apps/packaged version + git tag fork-vX.Y.Z)."
+        required: true
+        type: string
+      enable_mac:
+        description: "Build mac arm64 .dmg/.zip"
+        required: true
+        type: boolean
+        default: true
+      enable_win:
+        description: "Build Windows x64 NSIS installer"
+        required: true
+        type: boolean
+        default: true
+      enable_linux:
+        description: "Build Linux x64 AppImage"
+        required: true
+        type: boolean
+        default: true
+      draft:
+        description: "Create the GitHub Release as a draft"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: open-design-release-fork-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prep:
+    name: Prepare fork release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ inputs.version }}
+      tag: fork-v${{ inputs.version }}
+      release_name: Open Design (fork) ${{ inputs.version }}
+    steps:
+      - name: Echo inputs
+        run: |
+          echo "version=${{ inputs.version }}"
+          echo "tag=fork-v${{ inputs.version }}"
+          echo "draft=${{ inputs.draft }}"
+          echo "enable_mac=${{ inputs.enable_mac }}"
+          echo "enable_win=${{ inputs.enable_win }}"
+          echo "enable_linux=${{ inputs.enable_linux }}"
+
+  build_mac:
+    name: Build mac arm64 (unsigned)
+    needs: prep
+    if: ${{ inputs.enable_mac }}
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Mirror the upstream stable workflow's prerequisite: typecheck consumers
+      # of @open-design/daemon and @open-design/desktop resolve through their
+      # generated dist/*.d.ts, so build them once before pack runs.
+      - name: Build daemon and desktop
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+
+      - name: Apply fork release version
+        run: npm pkg set "version=${{ needs.prep.outputs.version }}" --prefix apps/packaged
+
+      - name: Build mac artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-fork-mac \
+            --portable \
+            --mac-compression maximum \
+            --to dmg
+
+      - name: Stage installers
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release-installers"
+          mkdir -p "$out"
+          # Pick up the user-installable artifacts only; skip *.app bundles
+          # (directories) and electron-builder internal blockmaps/yml feeds.
+          find "$RUNNER_TEMP/tools-pack/out" \
+            \( -name "*.dmg" -o -name "*.zip" \) \
+            -type f -print -exec cp {} "$out/" \;
+          ls -la "$out"
+
+      - name: Upload mac installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-fork-mac
+          path: ${{ runner.temp }}/release-installers
+          if-no-files-found: error
+
+  build_win:
+    name: Build Windows x64 (unsigned)
+    needs: prep
+    if: ${{ inputs.enable_win }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build daemon and desktop
+        shell: pwsh
+        run: |
+          pnpm --filter @open-design/daemon build
+          if ($LASTEXITCODE -ne 0) { throw "daemon build failed" }
+          pnpm --filter @open-design/desktop build
+          if ($LASTEXITCODE -ne 0) { throw "desktop build failed" }
+
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+
+      - name: Apply fork release version
+        run: npm pkg set "version=${{ needs.prep.outputs.version }}" --prefix apps/packaged
+
+      - name: Build Windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tools-pack win build `
+            --dir "${{ runner.temp }}/tools-pack" `
+            --namespace release-fork-win `
+            --portable `
+            --to nsis
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed ($LASTEXITCODE)" }
+
+      - name: Stage installers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $out = Join-Path $env:RUNNER_TEMP "release-installers"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $root = Join-Path $env:RUNNER_TEMP "tools-pack/out"
+          Get-ChildItem -Path $root -Recurse -File -Include *.exe |
+            Where-Object { $_.FullName -notmatch "win-unpacked" } |
+            ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $out -Force }
+          Get-ChildItem $out
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-fork-win
+          path: ${{ runner.temp }}/release-installers
+          if-no-files-found: error
+
+  build_linux:
+    name: Build Linux x64 AppImage
+    needs: prep
+    if: ${{ inputs.enable_linux }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build daemon and desktop
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+
+      - name: Apply fork release version
+        run: npm pkg set "version=${{ needs.prep.outputs.version }}" --prefix apps/packaged
+
+      # `--containerized` builds inside electronuserland/builder so the
+      # AppImage runs on older glibc than ubuntu-latest's host.
+      - name: Build Linux AppImage
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-fork-linux \
+            --portable \
+            --to appimage \
+            --containerized
+
+      - name: Stage installers
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release-installers"
+          mkdir -p "$out"
+          find "$RUNNER_TEMP/tools-pack/out" \
+            -name "*.AppImage" -type f -print -exec cp {} "$out/" \;
+          ls -la "$out"
+
+      - name: Upload Linux installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-fork-linux
+          path: ${{ runner.temp }}/release-installers
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [prep, build_mac, build_win, build_linux]
+    # Run if at least one platform succeeded; tolerate skipped lanes.
+    if: ${{ always() && (needs.build_mac.result == 'success' || needs.build_win.result == 'success' || needs.build_linux.result == 'success') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts
+          pattern: release-fork-*
+          merge-multiple: true
+
+      - name: List collected installers
+        run: ls -la artifacts || true
+
+      - name: Create or update GitHub Release
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prep.outputs.tag }}"
+          name="${{ needs.prep.outputs.release_name }}"
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<EOF
+          Fork release of dunzic/open-design at \`$GITHUB_SHA\`.
+
+          Built from the fork's main branch. Installers are **unsigned** —
+          first launch will trigger Gatekeeper (macOS) or SmartScreen
+          (Windows) warnings. Bypass per platform documentation.
+
+          | Platform | Artifact |
+          | --- | --- |
+          | macOS arm64 | \`*.dmg\` |
+          | Windows x64 | \`*.exe\` (NSIS) |
+          | Linux x64   | \`*.AppImage\` |
+          EOF
+
+          draft_flag=""
+          if [ "${{ inputs.draft }}" = "true" ]; then
+            draft_flag="--draft"
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" artifacts/* --clobber
+          else
+            gh release create "$tag" \
+              --title "$name" \
+              --notes-file "$notes_file" \
+              --target "$GITHUB_SHA" \
+              $draft_flag \
+              artifacts/*
+          fi
