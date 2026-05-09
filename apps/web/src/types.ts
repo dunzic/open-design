@@ -37,6 +37,7 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
   Project,
+  PreviewCommentIdKind,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
   PreviewComment,
@@ -69,6 +70,7 @@ export type {
   CloudflarePagesZonesResponse,
   OrbitRunSummary,
   OrbitStatusResponse,
+  PreviewCommentIdKind,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
 } from '@open-design/contracts';

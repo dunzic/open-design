@@ -796,6 +796,8 @@ export const pl: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Kliknij dowolny element z {tag}, aby dostosować jego styl.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Kliknij dowolny element z {tag}, aby zostawić komentarz.',
   'fileViewer.inspectEmptyHint.closeAria': 'Zamknij wskazówkę Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Poproś agenta o dodanie data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Dodaj unikalne atrybuty `data-od-id` do każdego niezależnie regulowanego bloku (section, h1-h6, button, a, karta, nav itp.). Użyj wzorca nazewnictwa `<area>-<role>-<n>` — np. `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Udostępnij',
   'fileViewer.exportPdf': 'Eksportuj jako PDF',
   'fileViewer.exportPdfAllSlides': 'Eksportuj jako PDF (wszystkie slajdy)',

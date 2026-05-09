@@ -683,6 +683,8 @@ export const ja: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': '{tag} を持つ要素をクリックしてスタイルを調整します。',
   'fileViewer.inspectEmptyHint.clickToComment': '{tag} を持つ要素をクリックしてコメントを残します。',
   'fileViewer.inspectEmptyHint.closeAria': '検査ヒントを閉じる',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'data-od-id をエージェントに追加してもらう',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': '個別に調整可能なすべてのブロック（section、h1-h6、button、a、card、nav など）に一意の data-od-id 属性を追加してください。命名規則は <area>-<role>-<n> 形式（例：hero-cta-0、feature-card-2）。',
   'fileViewer.shareLabel': '共有',
   'fileViewer.exportPdf': 'PDFとしてエクスポート',
   'fileViewer.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',

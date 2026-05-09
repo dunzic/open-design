@@ -168,6 +168,44 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }, [initialDraft, draft]);
 
+    // Fork-only (custom/008): listen for `od:chat-prefill` CustomEvents
+    // dispatched by FileViewer's empty-annotation hint banner. The
+    // banner's "Auto-fix" button fires this event with a ready-to-go
+    // prompt asking the agent to add data-od-id; we drop the prompt
+    // into the composer draft and focus the textarea so the user can
+    // tweak + Send. Decoupling via window event avoids threading a
+    // setComposerDraft callback through 4 layers of props.
+    useEffect(() => {
+      function onPrefill(ev: Event) {
+        const detail = (ev as CustomEvent<{ text?: string; replace?: boolean }>).detail;
+        const text = typeof detail?.text === 'string' ? detail.text : '';
+        if (!text) return;
+        // Default: append to existing draft on a new line so the user
+        // doesn't lose unsent text. Pass `replace: true` to clobber.
+        setDraft((current) => {
+          if (detail?.replace || !current.trim()) return text;
+          return `${current.trim()}\n\n${text}`;
+        });
+        seededRef.current = true;
+        const ta = textareaRef.current;
+        if (ta) {
+          ta.focus();
+          // Place caret at end so the user types after the inserted prompt.
+          requestAnimationFrame(() => {
+            try {
+              const len = ta.value.length;
+              ta.setSelectionRange(len, len);
+              ta.scrollTop = ta.scrollHeight;
+            } catch {
+              /* setSelectionRange not supported on every input */
+            }
+          });
+        }
+      }
+      window.addEventListener('od:chat-prefill', onPrefill as EventListener);
+      return () => window.removeEventListener('od:chat-prefill', onPrefill as EventListener);
+    }, []);
+
     useEffect(() => {
       if (!toolsOpen) return;
       function onPointer(e: MouseEvent) {

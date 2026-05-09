@@ -3512,6 +3512,14 @@ function HtmlViewer({
       selectionKind: data.selectionKind === 'pod' ? 'pod' : 'element',
       memberCount: finiteBridgeInteger(data.memberCount),
       podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
+      // Fork-only (custom/007): preserve idKind / outerHtml so the chat
+      // attachment renderer can switch between selector-based and
+      // outerHTML-based agent guidance.
+      idKind:
+        data.idKind === 'auto' || data.idKind === 'screen-label' || data.idKind === 'stable'
+          ? data.idKind
+          : undefined,
+      outerHtml: typeof data.outerHtml === 'string' ? data.outerHtml.slice(0, 1500) : undefined,
     });
     function onMessage(ev: MessageEvent) {
       if (ev.source !== iframeRef.current?.contentWindow) return;
@@ -4968,6 +4976,32 @@ function HtmlViewer({
                           : 'fileViewer.inspectEmptyHint.noTargetsComment',
                       ),
                     )}
+                    {' '}
+                    {/*
+                      Fork-only (custom/008): single-click "Auto-fix" path.
+                      Dispatches a window CustomEvent that ChatComposer
+                      listens for; the prefill prompt asks the agent to
+                      annotate every tweakable region with data-od-id so
+                      Picker / Pods / Inspect all start working again.
+                      Decoupled via the event channel so we don't have to
+                      thread a setComposerDraft callback up through
+                      FileWorkspace + ProjectView. User still has to hit
+                      Send — the click is a one-step shortcut, not an
+                      auto-submit.
+                    */}
+                    <button
+                      type="button"
+                      className="inspect-empty-hint-action"
+                      data-testid="inspect-empty-hint-auto-annotate"
+                      onClick={() => {
+                        if (typeof window === 'undefined') return;
+                        window.dispatchEvent(new CustomEvent('od:chat-prefill', {
+                          detail: { text: t('fileViewer.inspectEmptyHint.autoAnnotatePrompt') },
+                        }));
+                      }}
+                    >
+                      {t('fileViewer.inspectEmptyHint.autoAnnotateLabel')}
+                    </button>
                   </div>
                 ) : (
                   <div

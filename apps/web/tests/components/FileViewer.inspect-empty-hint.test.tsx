@@ -158,4 +158,57 @@ describe('FileViewer Inspect/Picker empty-annotation hint (#890)', () => {
     expect(screen.getByTestId('inspect-empty-hint-no-targets').textContent ?? '')
       .toMatch(/comment on/i);
   });
+
+  // Fork-only (custom/008): the empty-state hint hosts an "Auto-fix"
+  // button that dispatches a window CustomEvent ChatComposer listens
+  // for. The button renders alongside the no-targets copy so the user
+  // can one-click prefill the chat composer with a ready-to-go prompt
+  // asking the agent to add data-od-id back to the artifact.
+  it('dispatches od:chat-prefill with the auto-annotate prompt when the auto-fix button is clicked', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={htmlFile()}
+        liveHtml="<html><body><h1>No annotations</h1></body></html>"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+    await act(async () => {
+      postTargetsFromIframe([]);
+    });
+
+    const events: CustomEvent[] = [];
+    const handler = (ev: Event) => events.push(ev as CustomEvent);
+    window.addEventListener('od:chat-prefill', handler);
+
+    const button = screen.getByTestId('inspect-empty-hint-auto-annotate');
+    expect(button).toBeTruthy();
+    fireEvent.click(button);
+
+    window.removeEventListener('od:chat-prefill', handler);
+
+    expect(events).toHaveLength(1);
+    const detail = events[0]?.detail as { text?: string } | undefined;
+    expect(typeof detail?.text).toBe('string');
+    // The prompt must reference the literal attribute name the agent
+    // is being asked to add. If a future i18n key drifts from this
+    // contract the test fires before the user-facing CTA stops working.
+    expect(detail!.text!).toMatch(/data-od-id/);
+  });
+
+  it('does NOT render the auto-fix button when targets exist (the artifact already has data-od-id)', async () => {
+    render(
+      <FileViewer
+        projectId="project-1"
+        file={htmlFile()}
+        liveHtml="<html><body><main data-od-id='hero'>Hero</main></body></html>"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inspect-mode-toggle'));
+    await act(async () => {
+      postTargetsFromIframe([{ elementId: 'hero' }]);
+    });
+
+    expect(screen.queryByTestId('inspect-empty-hint-auto-annotate')).toBeNull();
+  });
 });

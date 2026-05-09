@@ -1019,6 +1019,11 @@ export interface Dict {
   'fileViewer.inspectEmptyHint.clickToTune': string;
   'fileViewer.inspectEmptyHint.clickToComment': string;
   'fileViewer.inspectEmptyHint.closeAria': string;
+  // Fork-only (custom/008). The "Auto-fix" button on the empty-annotation
+  // banner — clicking it prefills the chat composer with the prompt below
+  // so the user just hits Send to get the agent to add data-od-id back.
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': string;
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': string;
   'fileViewer.shareLabel': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;

@@ -1,6 +1,7 @@
 import type {
   ChatCommentAttachment,
   ChatMessage,
+  PreviewCommentIdKind,
   PreviewCommentMember,
   PreviewComment,
   PreviewCommentSelectionKind,
@@ -18,6 +19,12 @@ export interface PreviewCommentSnapshot {
   selectionKind?: PreviewCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  // Fork-only (custom/007). When idKind === 'auto' the selector is a
+  // synthetic data-od-auto-id from the iframe selection bridge, so the
+  // popover renders a "synthetic locator" affordance and the chat
+  // attachment renderer falls back to outerHtml-based location.
+  idKind?: PreviewCommentIdKind;
+  outerHtml?: string;
 }
 
 export interface CommentOverlayBounds {
@@ -47,6 +54,8 @@ export function targetFromSnapshot(snapshot: PreviewCommentSnapshot): PreviewCom
               : 0)
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
+    idKind: snapshot.idKind,
+    outerHtml: trimOuterHtml(snapshot.outerHtml),
   };
 }
 
@@ -78,6 +87,11 @@ export function commentToAttachment(
   order: number,
 ): ChatCommentAttachment {
   const podMembers = normalizeMembers(comment.podMembers);
+  // Saved comments always have stable identifiers — the host refuses
+  // to call onSavePreviewComment when a snapshot's idKind is 'auto'
+  // (per Save-comment guard in FileViewer's BoardComposerPopover).
+  // Force idKind to 'stable' for safety so the chat attachment renderer
+  // never emits synthetic-locator scaffolding for persisted entries.
   return {
     id: comment.id,
     order,
@@ -100,6 +114,7 @@ export function commentToAttachment(
         : undefined,
     podMembers: podMembers.length > 0 ? podMembers : undefined,
     source: 'saved-comment',
+    idKind: 'stable',
   };
 }
 
@@ -139,6 +154,8 @@ export function buildBoardCommentAttachments(input: {
       memberCount,
       podMembers: podMembers.length > 0 ? podMembers : undefined,
       source: 'board-batch',
+      idKind: input.target.idKind,
+      outerHtml: trimOuterHtml(input.target.outerHtml),
     }));
 }
 
@@ -206,6 +223,16 @@ export function trimHtmlHint(value: string): string {
   return text.length > 180 ? `${text.slice(0, 177)}...` : text;
 }
 
+// Fork-only (custom/007). The bridge already caps outerHtml at 1500 chars
+// — this normalization mirrors trimHtmlHint so the chat attachment block
+// stays line-bounded even if a future bridge change relaxes the cap.
+export function trimOuterHtml(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const collapsed = value.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return undefined;
+  return collapsed.length > 1500 ? `${collapsed.slice(0, 1497)}...` : collapsed;
+}
+
 function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachment[]): string {
   const lines = [
     '',
@@ -213,13 +240,27 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
     '<attached-preview-comments>',
     'Scope: apply the user request to the attached preview target by default. Preserve unrelated elements.',
   ];
+  // Fork-only (custom/007): if any attachment uses a synthetic locator
+  // (the in-memory data-od-auto-id minted by the iframe selection
+  // bridge for unannotated artifacts), emit a one-time agent guidance
+  // header so the model knows to look at outerHtml instead of trying
+  // to find the selector in source. The header sits above the
+  // per-target list so the model reads it first.
+  const hasSynthetic = commentAttachments.some((item) => item.idKind === 'auto');
+  if (hasSynthetic) {
+    lines.push(
+      'Locator note: targets marked `idKind: auto` carry a synthetic `data-od-auto-id` that is NOT present in the source file. Locate those elements in source via the `outerHtml` block (matching tag + attributes + inner content), NOT by searching for the selector. Do not write the auto-id back to source.',
+    );
+  }
   commentAttachments.forEach((item) => {
     const position = normalizePosition(item.pagePosition);
     const selectionKind = item.selectionKind === 'pod' ? 'pod' : 'element';
+    const idKind = item.idKind ?? 'stable';
     lines.push(
       '',
       `${item.order}. ${item.elementId}`,
       `targetKind: ${selectionKind}`,
+      `idKind: ${idKind}`,
       `file: ${item.filePath}`,
       `selector: ${item.selector}`,
       `label: ${item.label || '(unlabeled)'}`,
@@ -228,6 +269,18 @@ function renderCommentAttachmentContext(commentAttachments: ChatCommentAttachmen
       `htmlHint: ${trimHtmlHint(item.htmlHint || '') || '(none)'}`,
       `comment: ${item.comment}`,
     );
+    // Synthetic locators: emit the full outerHtml snippet as a separate
+    // line block so the agent has substring text to match against
+    // source. We do NOT split this into multiple lines — outerHtml
+    // already had its whitespace collapsed in trimOuterHtml.
+    if (idKind === 'auto') {
+      const outer = trimOuterHtml(item.outerHtml ?? '');
+      if (outer) {
+        lines.push(`outerHtml: ${outer}`);
+      } else {
+        lines.push('outerHtml: (unavailable — fall back to currentText + htmlHint)');
+      }
+    }
     if (selectionKind === 'pod') {
       lines.push(`memberCount: ${item.memberCount || item.podMembers?.length || 0}`);
       (item.podMembers ?? []).slice(0, 8).forEach((member, memberIndex) => {

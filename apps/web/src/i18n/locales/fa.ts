@@ -811,6 +811,8 @@ export const fa: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'روی هر عنصری با {tag} کلیک کنید تا سبک آن را تنظیم کنید.',
   'fileViewer.inspectEmptyHint.clickToComment': 'روی هر عنصری با {tag} کلیک کنید تا نظر بگذارید.',
   'fileViewer.inspectEmptyHint.closeAria': 'بستن راهنمای بررسی',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'از عامل بخواهید data-od-id اضافه کند',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'برای هر بخش قابل تنظیم مستقل (section، h1-h6، button، a، کارت، nav و غیره) ویژگی `data-od-id` منحصربه‌فرد اضافه کنید. از الگوی نام‌گذاری `<area>-<role>-<n>` استفاده کنید — مانند `hero-cta-0`، `feature-card-2`.',
   'fileViewer.shareLabel': 'اشتراک‌گذاری',
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',

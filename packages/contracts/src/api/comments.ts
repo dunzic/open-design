@@ -26,6 +26,20 @@ export interface PreviewCommentMember {
   htmlHint: string;
 }
 
+// Fork-only (custom/007): identifier provenance for this target.
+//   - 'stable':       the artifact authored a `data-od-id` attribute.
+//   - 'screen-label': the artifact authored a `data-screen-label`.
+//   - 'auto':         the iframe selection bridge synthesized a
+//                     `data-od-auto-id` because the artifact lacks any
+//                     stable annotation. The selector points at an
+//                     attribute that does NOT exist in the source file
+//                     — the agent must locate the element via outerHtml
+//                     instead. Auto-ids are regenerated on every srcdoc
+//                     rebuild, so they work for one-shot Picker / Pods
+//                     attachments only; Inspect overrides + saved
+//                     comments refuse to persist them.
+export type PreviewCommentIdKind = 'stable' | 'screen-label' | 'auto';
+
 export interface PreviewCommentTarget {
   filePath: string;
   elementId: string;
@@ -37,6 +51,9 @@ export interface PreviewCommentTarget {
   selectionKind?: PreviewCommentSelectionKind;
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
+  // Fork-only (custom/007).
+  idKind?: PreviewCommentIdKind;
+  outerHtml?: string;
 }
 
 export interface PreviewComment {

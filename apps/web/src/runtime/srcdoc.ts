@@ -297,6 +297,72 @@ function injectSelectionBridge(
   var drawing = false;
   var stroke = [];
   var postTargetsTimer = null;
+  // custom/007: when comment mode (Tweaks) boots and the artifact lacks
+  // any data-od-id / data-screen-label annotations, eagerly inject
+  // data-od-auto-id="auto-N" on visible content / leaf / landmark
+  // elements so Picker and Pods can still capture them. The auto-ids
+  // are scoped to the in-memory iframe DOM only — they never get
+  // written back to the artifact source. Subsequent srcdoc rebuilds
+  // start with a clean slate (the counter resets to 0 with the
+  // reloaded IIFE), so any chat attachment that uses an auto-id is a
+  // one-shot locator: the agent must rely on outerHtml or the textual
+  // hint, not on the id surviving across edits.
+  //
+  // Inspect mode is intentionally NOT extended this way — Inspect's
+  // per-element CSS overrides persist into the
+  // <style data-od-inspect-overrides> block keyed by elementId, and a
+  // regenerated id would silently lose the rule across rebuilds.
+  // applyOverride below refuses to write auto-id-keyed entries.
+  var AUTO_ID_COUNTER = 0;
+  var AUTO_ID_PREFIX = 'auto-';
+  var AUTO_TAG_SKIP_TAGS = {
+    SCRIPT: true, STYLE: true, LINK: true, META: true, TEMPLATE: true,
+    NOSCRIPT: true, BR: true, HR: true, HEAD: true, TITLE: true,
+  };
+  var AUTO_TAG_LEAF_TAGS = {
+    BUTTON: true, A: true, IMG: true, VIDEO: true, AUDIO: true,
+    INPUT: true, TEXTAREA: true, SELECT: true, IFRAME: true,
+    CANVAS: true, SVG: true, svg: true,
+  };
+  var AUTO_TAG_LANDMARK_TAGS = {
+    SECTION: true, ARTICLE: true, NAV: true, HEADER: true, FOOTER: true,
+    ASIDE: true, MAIN: true, FIGURE: true, FIGCAPTION: true,
+  };
+  function shouldAutoTag(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label') || el.hasAttribute('data-od-auto-id')) return false;
+    var tag = el.tagName;
+    if (Object.prototype.hasOwnProperty.call(AUTO_TAG_SKIP_TAGS, tag)) return false;
+    // Skip svg subtree leaves; tag the <svg> root only.
+    if (el.namespaceURI && el.namespaceURI.indexOf('/svg') >= 0 && tag !== 'svg' && tag !== 'SVG') return false;
+    var rect;
+    try { rect = el.getBoundingClientRect(); } catch (_) { return false; }
+    if (!rect || rect.width < 4 || rect.height < 4) return false;
+    if (Object.prototype.hasOwnProperty.call(AUTO_TAG_LEAF_TAGS, tag)) return true;
+    if (Object.prototype.hasOwnProperty.call(AUTO_TAG_LANDMARK_TAGS, tag)) return true;
+    if (el.hasAttribute('role')) return true;
+    // Tag elements with their own non-whitespace text node (excludes
+    // pure wrapper divs that just hold tagged children).
+    var children = el.childNodes;
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+      if (child.nodeType === 3 && (child.textContent || '').trim().length > 0) return true;
+    }
+    return false;
+  }
+  function injectAutoIds() {
+    if (!document.body) return 0;
+    var nodes = document.body.querySelectorAll('*');
+    var added = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!shouldAutoTag(node)) continue;
+      AUTO_ID_COUNTER++;
+      try { node.setAttribute('data-od-auto-id', AUTO_ID_PREFIX + AUTO_ID_COUNTER); } catch (_) {}
+      added++;
+    }
+    return added;
+  }
   // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
   var overrides = Object.create(null);
   var styleEl = null;
@@ -331,6 +397,10 @@ function injectSelectionBridge(
   // decide which attribute kind (data-od-id vs data-screen-label) was the
   // user's pick at click time, so we tune the same node the host
   // serializer keys off; the hint itself is never written into CSS.
+  // Inspect-mode safeSelectorFor: only stable ids. Persisted CSS
+  // overrides are keyed off the returned selector, so accepting an
+  // auto-id here would silently break the next srcdoc rebuild
+  // (auto-ids regenerate fresh).
   function safeSelectorFor(elementId, hint){
     var id = String(elementId);
     var kind = null;
@@ -449,26 +519,56 @@ function injectSelectionBridge(
     } catch (_) { return null; }
   }
   function targetFrom(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    var dataOdId = el.getAttribute('data-od-id');
+    var screenLabel = el.getAttribute('data-screen-label');
+    var autoId = el.getAttribute('data-od-auto-id');
+    var id = dataOdId || screenLabel || autoId;
     if (!id) return null;
+    var idKind = dataOdId ? 'stable' : (screenLabel ? 'screen-label' : 'auto');
     var rect = el.getBoundingClientRect();
     var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
-    var html = '';
-    try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
+    var openingTag = '';
+    try { openingTag = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
+    var selector;
+    if (idKind === 'stable') selector = '[data-od-id="' + esc(id) + '"]';
+    else if (idKind === 'screen-label') selector = '[data-screen-label="' + esc(id) + '"]';
+    else selector = '[data-od-auto-id="' + esc(id) + '"]';
+    // For synthetic (auto-id) targets the selector cannot be used to
+    // find the element in source — the auto-id only lives in this
+    // iframe's in-memory DOM. Capture a longer outerHTML snippet so
+    // the agent can locate the element by content. Strip our injected
+    // attribute so the snippet matches what the source actually has.
+    var outerHtmlSnippet = '';
+    if (idKind === 'auto') {
+      try {
+        var raw = (el.outerHTML || '').replace(/\\s+/g, ' ');
+        raw = raw.replace(/\\s+data-od-auto-id="[^"]*"/g, '');
+        outerHtmlSnippet = raw.slice(0, 1500);
+      } catch (_) {}
+    }
     return {
       type: 'od:comment-target',
       elementId: id,
-      selector: el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]',
+      selector: selector,
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
-      htmlHint: html.slice(0, 180),
+      htmlHint: openingTag.slice(0, 180),
+      idKind: idKind,
+      outerHtml: outerHtmlSnippet,
       style: styleSnapshot(el)
     };
   }
   function allTargets(){
-    var nodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    // Auto-ids are valid pod targets only while comment mode is active —
+    // they exist to give Picker / Pods something to grab on unannotated
+    // artifacts. Inspect mode (which also subscribes to od:comment-targets)
+    // must not see them, since its persisted overrides require stable ids.
+    var query = commentEnabled
+      ? '[data-od-id], [data-screen-label], [data-od-auto-id]'
+      : '[data-od-id], [data-screen-label]';
+    var nodes = document.querySelectorAll(query);
     var items = [];
     for (var i = 0; i < nodes.length; i++) {
       var item = targetFrom(nodes[i]);
@@ -502,7 +602,12 @@ function injectSelectionBridge(
   function closestTarget(event){
     var el = event.target;
     while (el && el !== document.documentElement) {
-      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
+      if (el.getAttribute) {
+        if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return el;
+        // Auto-ids are valid click targets only while comment mode is
+        // active (Picker / Pods). Inspect-only mode walks past them.
+        if (commentEnabled && el.hasAttribute('data-od-auto-id')) return el;
+      }
       el = el.parentElement;
     }
     return null;
@@ -515,6 +620,12 @@ function injectSelectionBridge(
   function applyOverride(elementId, selector, prop, value){
     if (!elementId || !prop) return;
     if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, prop)) return;
+    // custom/007: refuse to persist Inspect overrides against
+    // data-od-auto-id selectors. Auto-ids are regenerated on every
+    // srcdoc rebuild, so a saved <style data-od-inspect-overrides>
+    // rule like [data-od-auto-id="auto-3"] { color: red } would point
+    // at a different element on next reload (or none at all).
+    if (typeof selector === 'string' && selector.indexOf('[data-od-auto-id=') === 0) return;
     var safeSelector = safeSelectorFor(elementId, selector);
     if (!safeSelector) return;
     var v = (value == null) ? '' : String(value).trim();
@@ -546,6 +657,11 @@ function injectSelectionBridge(
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      // custom/007: inject synthetic auto-ids the first time Tweaks
+      // flips on, so Picker / Pods work on freeform artifacts that
+      // ship without data-od-id. shouldAutoTag short-circuits on
+      // already-tagged nodes, so repeated toggles are idempotent.
+      if (commentEnabled) injectAutoIds();
       if (active()) setTimeout(postTargets, 0);
       else hoveredId = null;
       if (!commentEnabled || mode !== 'pod') {
@@ -680,6 +796,14 @@ function injectSelectionBridge(
   if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);
   if (inspectEnabled) document.documentElement.toggleAttribute('data-od-inspect-mode', true);
   document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+  // custom/007: also inject auto-ids on initial boot if Tweaks comes up
+  // already enabled (host seeds initialCommentMode so the bridge boots
+  // with picking active and the auto-id population must beat the first
+  // postTargets / hover so Picker is wired before any user click). DOM
+  // may still be loading at this point — guard with readyState below.
+  function bootAutoTag(){ if (commentEnabled) injectAutoIds(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootAutoTag);
+  else bootAutoTag();
   hydrateOverridesFromDom();
   // Acknowledge the hydrated overrides to the host as a preview signal so
   // diagnostic listeners (and tests) can observe that the bridge is in sync

@@ -778,6 +778,8 @@ export const th: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'คลิกองค์ประกอบใด ๆ ที่มี {tag} เพื่อปรับสไตล์',
   'fileViewer.inspectEmptyHint.clickToComment': 'คลิกองค์ประกอบใด ๆ ที่มี {tag} เพื่อแสดงความคิดเห็น',
   'fileViewer.inspectEmptyHint.closeAria': 'ปิดคำแนะนำ Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'ขอให้เอเจนต์เพิ่ม data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'เพิ่มแอตทริบิวต์ `data-od-id` ที่ไม่ซ้ำกันให้กับทุกบล็อกที่สามารถปรับเปลี่ยนได้แยกกัน (section, h1-h6, button, a, การ์ด, nav ฯลฯ) ใช้รูปแบบการตั้งชื่อ `<area>-<role>-<n>` — เช่น `hero-cta-0`, `feature-card-2`',
   'fileViewer.shareLabel': 'แชร์',
   'fileViewer.exportPdf': 'เปลี่ยนฟอร์แมตเอาไปเป็น PDF',
   'fileViewer.exportPdfAllSlides': 'ดาวน์โหลดทั้งหน้าเป็น PDF',

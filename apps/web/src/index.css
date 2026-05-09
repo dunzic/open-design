@@ -8749,6 +8749,28 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   font-size: 11px;
 }
 
+/* Fork-only (custom/008): "Ask agent to add data-od-id" auto-annotate
+   button on the empty-state hint. Visually offset from the surrounding
+   muted body copy so the call-to-action is unambiguous, but still
+   compact enough not to overflow the dashed-border container. */
+.inspect-empty-hint-action {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent, var(--border));
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--accent, var(--text));
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.inspect-empty-hint-action:hover {
+  background: var(--accent, var(--bg-subtle));
+  color: var(--bg, var(--text));
+}
+
 .comments-panel {
   display: flex;
   flex-direction: column;

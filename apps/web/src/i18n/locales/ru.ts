@@ -810,6 +810,8 @@ export const ru: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Нажмите на любой элемент с {tag}, чтобы настроить его стиль.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Нажмите на любой элемент с {tag}, чтобы оставить комментарий.',
   'fileViewer.inspectEmptyHint.closeAria': 'Закрыть подсказку Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Попросить агента добавить data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Добавьте уникальные атрибуты `data-od-id` ко всем независимо настраиваемым блокам (section, h1-h6, button, a, карточка, nav и т. д.). Используйте схему именования `<area>-<role>-<n>` — например `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Поделиться',
   'fileViewer.exportPdf': 'Экспорт в PDF',
   'fileViewer.exportPdfAllSlides': 'Экспорт в PDF (все слайды)',

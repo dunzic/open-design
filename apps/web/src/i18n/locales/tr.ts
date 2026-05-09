@@ -787,6 +787,8 @@ export const tr: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Stilini ayarlamak için {tag} olan herhangi bir öğeye tıklayın.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Yorum bırakmak için {tag} olan herhangi bir öğeye tıklayın.',
   'fileViewer.inspectEmptyHint.closeAria': 'Inspect ipucunu kapat',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Ajandan data-od-id eklemesini iste',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Bağımsız olarak ayarlanabilir her bloğa (section, h1-h6, button, a, kart, nav vb.) benzersiz `data-od-id` öznitelikleri ekleyin. `<area>-<role>-<n>` adlandırma şablonunu kullanın — örneğin `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Paylaş',
   'fileViewer.exportPdf': 'PDF olarak dışa aktar',
   'fileViewer.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',

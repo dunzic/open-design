@@ -829,6 +829,8 @@ export const uk: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Натисніть будь-який елемент з {tag}, щоб налаштувати його стиль.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Натисніть будь-який елемент з {tag}, щоб залишити коментар.',
   'fileViewer.inspectEmptyHint.closeAria': 'Закрити підказку Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Попросити агента додати data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Додайте унікальні атрибути `data-od-id` до кожного блоку, який можна налаштовувати незалежно (section, h1-h6, button, a, картка, nav тощо). Використовуйте схему `<area>-<role>-<n>` — наприклад `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Поділитися',
   'fileViewer.exportPdf': 'Експортувати як PDF',
   'fileViewer.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',

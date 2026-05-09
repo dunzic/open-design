@@ -903,6 +903,8 @@ export const id: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Klik elemen apa pun dengan {tag} untuk menyesuaikan gayanya.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Klik elemen apa pun dengan {tag} untuk meninggalkan komentar.',
   'fileViewer.inspectEmptyHint.closeAria': 'Tutup petunjuk Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Minta agen menambahkan data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Tambahkan atribut `data-od-id` unik ke setiap blok yang dapat disesuaikan secara independen (section, h1-h6, button, a, kartu, nav, dll). Gunakan pola penamaan `<area>-<role>-<n>` — misalnya `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Bagikan',
   'fileViewer.exportPdf': 'Ekspor PDF',
   'fileViewer.exportPdfAllSlides': 'Ekspor PDF semua slide',

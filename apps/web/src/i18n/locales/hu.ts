@@ -796,6 +796,8 @@ export const hu: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Kattints bármely {tag}-gel rendelkező elemre a stílus beállításához.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Kattints bármely {tag}-gel rendelkező elemre megjegyzés hagyásához.',
   'fileViewer.inspectEmptyHint.closeAria': 'Inspect tipp bezárása',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Kérd meg az ügynököt, adja hozzá a data-od-id-t',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Adj egyedi `data-od-id` attribútumokat minden egyenként szabályozható blokkhoz (section, h1-h6, button, a, kártya, nav stb.). Használd a `<area>-<role>-<n>` elnevezési mintát — pl. `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Megosztás',
   'fileViewer.exportPdf': 'Exportálás PDF-ként',
   'fileViewer.exportPdfAllSlides': 'Exportálás PDF-ként (minden dia)',

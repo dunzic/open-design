@@ -29,6 +29,8 @@ folder tells you why we touched it and how to re-apply.
 | 004 | [Manual proxy toggle in Settings](004-manual-proxy-toggle.md) | 2026-05-09 | Active |
 | 005 | [FileViewer native fullscreen exit affordance](005-fileviewer-fullscreen-exit.md) | 2026-05-09 | Active |
 | 006 | [i18n the Inspect / Picker empty-annotation hint](006-inspect-empty-hint-i18n.md) | 2026-05-09 | Active |
+| 007 | [Tweaks no-annotation fallback (synthetic data-od-auto-id)](007-tweaks-no-annotation-fallback.md) | 2026-05-09 | Active |
+| 008 | [Empty-state hint adds auto-annotate composer prefill](008-tweaks-auto-annotate-prompt.md) | 2026-05-09 | Active |
 
 
 ## Merge policy — **四原则**

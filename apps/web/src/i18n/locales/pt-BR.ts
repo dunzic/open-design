@@ -810,6 +810,8 @@ export const ptBR: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Clique em qualquer elemento com {tag} para ajustar o estilo.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Clique em qualquer elemento com {tag} para deixar um comentário.',
   'fileViewer.inspectEmptyHint.closeAria': 'Fechar dica do Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Pedir ao agente para adicionar data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Adicione atributos `data-od-id` únicos em cada bloco ajustável de forma independente (section, h1-h6, button, a, card, nav, etc.). Use o padrão `<area>-<role>-<n>` — por exemplo `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Compartilhar',
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',

@@ -684,6 +684,8 @@ export const de: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Klicke auf ein Element mit {tag}, um seinen Stil anzupassen.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Klicke auf ein Element mit {tag}, um einen Kommentar zu hinterlassen.',
   'fileViewer.inspectEmptyHint.closeAria': 'Inspect-Hinweis schließen',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Agent bitten, data-od-id hinzuzufügen',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Füge eindeutige `data-od-id`-Attribute zu allen unabhängig anpassbaren Bereichen (section, h1-h6, button, a, Karte, nav usw.) hinzu. Verwende das Namensschema `<area>-<role>-<n>` — z. B. `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Teilen',
   'fileViewer.exportPdf': 'Als PDF exportieren',
   'fileViewer.exportPdfAllSlides': 'Als PDF exportieren (alle Slides)',

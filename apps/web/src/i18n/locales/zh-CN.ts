@@ -853,6 +853,8 @@ export const zhCN: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': '点击带 {tag} 的元素以调整其样式。',
   'fileViewer.inspectEmptyHint.clickToComment': '点击带 {tag} 的元素以添加评论。',
   'fileViewer.inspectEmptyHint.closeAria': '关闭检查提示',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': '让代理补上 data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': '给所有可独立调整的区块（section / h1-h6 / button / a / 卡片 / nav 等）加上唯一的 data-od-id 属性，命名用 <area>-<role>-<n> 格式，例如 hero-cta-0、feature-card-2。',
   'fileViewer.shareLabel': '分享',
   'fileViewer.exportPdf': '导出为 PDF',
   'fileViewer.exportPdfAllSlides': '导出为 PDF（全部幻灯片）',

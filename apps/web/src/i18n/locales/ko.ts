@@ -796,6 +796,8 @@ export const ko: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': '{tag} 가 있는 요소를 클릭하여 스타일을 조정하세요.',
   'fileViewer.inspectEmptyHint.clickToComment': '{tag} 가 있는 요소를 클릭하여 댓글을 남기세요.',
   'fileViewer.inspectEmptyHint.closeAria': '검사 힌트 닫기',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': '에이전트에게 data-od-id 추가 요청',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': '개별적으로 조정할 수 있는 모든 블록(section, h1-h6, button, a, 카드, nav 등)에 고유한 data-od-id 속성을 추가해 주세요. 이름 규칙은 <area>-<role>-<n> 형식 — 예: hero-cta-0, feature-card-2.',
   'fileViewer.shareLabel': '공유',
   'fileViewer.exportPdf': 'PDF로 내보내기',
   'fileViewer.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',

@@ -1,5 +1,6 @@
 import type { ProjectFile } from './files';
 import type {
+  PreviewCommentIdKind,
   PreviewCommentMember,
   PreviewCommentPosition,
   PreviewCommentSelectionKind,
@@ -83,6 +84,13 @@ export interface ChatCommentAttachment {
   memberCount?: number;
   podMembers?: PreviewCommentMember[];
   source?: 'saved-comment' | 'board-batch';
+  // Fork-only (custom/007). When idKind === 'auto' the selector is a
+  // synthetic data-od-auto-id that does not appear in the source file;
+  // the renderer in apps/web/src/comments.ts emits an explicit "locate
+  // via outerHtml" hint into the chat attachment block so the agent
+  // searches for outerHtml content instead of the selector.
+  idKind?: PreviewCommentIdKind;
+  outerHtml?: string;
 }
 
 export type PersistedAgentEvent =

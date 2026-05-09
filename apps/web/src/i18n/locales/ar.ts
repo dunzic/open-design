@@ -796,6 +796,8 @@ export const ar: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'انقر على أي عنصر يحتوي على {tag} لضبط نمطه.',
   'fileViewer.inspectEmptyHint.clickToComment': 'انقر على أي عنصر يحتوي على {tag} لترك تعليق.',
   'fileViewer.inspectEmptyHint.closeAria': 'إغلاق تلميح الفحص',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'اطلب من الوكيل إضافة data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'أضف سمات `data-od-id` فريدة لكل قسم قابل للتعديل بشكل مستقل (section و h1-h6 و button و a والبطاقات و nav وغيرها). استخدم نمط التسمية `<area>-<role>-<n>` — مثل `hero-cta-0` و `feature-card-2`.',
   'fileViewer.shareLabel': 'مشاركة',
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',

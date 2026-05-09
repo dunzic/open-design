@@ -685,6 +685,8 @@ export const esES: Dict = {
   'fileViewer.inspectEmptyHint.clickToTune': 'Haz clic en cualquier elemento con {tag} para ajustar su estilo.',
   'fileViewer.inspectEmptyHint.clickToComment': 'Haz clic en cualquier elemento con {tag} para dejar un comentario.',
   'fileViewer.inspectEmptyHint.closeAria': 'Cerrar sugerencia de Inspect',
+  'fileViewer.inspectEmptyHint.autoAnnotateLabel': 'Pedirle al agente que añada data-od-id',
+  'fileViewer.inspectEmptyHint.autoAnnotatePrompt': 'Añade atributos `data-od-id` únicos a cada bloque ajustable de forma independiente (section, h1-h6, button, a, tarjeta, nav, etc.). Usa el patrón de nombres `<area>-<role>-<n>` — p. ej. `hero-cta-0`, `feature-card-2`.',
   'fileViewer.shareLabel': 'Compartir',
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todas las diapositivas)',
