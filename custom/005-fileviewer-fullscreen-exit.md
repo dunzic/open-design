@@ -55,6 +55,17 @@ in-app exit affordance even after the 0.6.0 release.
 
 ## Re-apply notes
 
+- The `position: relative` declaration we added to
+  `.live-artifact-preview-frame-host` is purely an anchor for the
+  absolute-positioned `.present-exit-btn` while the host element is
+  fullscreened — it does **not** alter the non-fullscreen layout
+  (no positioned descendants depended on the implicit `static`
+  before, and a manual layout audit confirmed nothing shifts). If a
+  future upstream change adds its own `position` declaration to that
+  selector or restructures the wrapper, drop our line; if upstream
+  introduces positioned children that DO rely on the original
+  `static`, switch our anchor to a parent class instead. Either way,
+  do not silently keep both.
 - If upstream lifts `presentFullscreen` UX into a shared hook or
   promotes an in-app exit affordance into the same code, demote this
   requirement to **superseded** and adopt theirs. Tracking signals to

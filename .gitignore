@@ -54,3 +54,6 @@ specs/change/active
 
 # Local design assistant context
 .impeccable.md
+
+# Local Obsidian workspace metadata; per-developer, not team-shared.
+.obsidian/
