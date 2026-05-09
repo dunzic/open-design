@@ -397,9 +397,24 @@ export function LiveArtifactViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const presentWrapRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
+  // Fork-only (custom/005): see FileViewer's HtmlViewer for the rationale.
+  // LiveArtifactViewer also enters native fullscreen via requestFullscreen()
+  // and needs the same in-app exit affordance.
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+  }, []);
+  useEffect(() => {
+    const onFsChange = () => {
+      setNativeFullscreen(
+        Boolean(document.fullscreenElement) &&
+          (document.fullscreenElement === previewBodyRef.current ||
+            document.fullscreenElement === iframeRef.current),
+      );
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -585,8 +600,18 @@ export function LiveArtifactViewer({
     setMode('preview');
     const target = previewBodyRef.current ?? iframeRef.current;
     if (target?.requestFullscreen) {
-      void target.requestFullscreen().catch(() => {});
+      void target
+        .requestFullscreen()
+        .then(() => setNativeFullscreen(true))
+        .catch(() => {});
     }
+  };
+  // Fork-only (custom/005): mirrors HtmlViewer.exitNativeFullscreen.
+  const exitNativeFullscreen = () => {
+    if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    setNativeFullscreen(false);
   };
   const presentNewTab = () => {
     setPresentMenuOpen(false);
@@ -768,6 +793,17 @@ export function LiveArtifactViewer({
         ) : null}
         {mode === 'preview' ? (
           <div ref={previewBodyRef} className="live-artifact-preview-frame-host">
+            {nativeFullscreen ? (
+              <button
+                type="button"
+                className="present-exit-btn"
+                onClick={exitNativeFullscreen}
+                title={t('common.exitFullscreen')}
+                aria-label={t('common.exitFullscreen')}
+              >
+                <Icon name="close" size={14} />
+              </button>
+            ) : null}
             <div
               style={{
                 width: `${100 / previewScale}%`,
@@ -3168,9 +3204,25 @@ function HtmlViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
+  // Fork-only (custom/005): mirror native Fullscreen API state into React so
+  // we can render an in-app exit affordance. Without this, presentFullscreen
+  // calls el.requestFullscreen() and the only way out is the browser's Esc
+  // key — there is no visible "minimize" button while fullscreened. Mirrors
+  // the pattern already used in PreviewModal.tsx.
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
   useEffect(() => {
     if (typeof document === 'undefined') return;
     setChromeActionsHost(document.getElementById(APP_CHROME_FILE_ACTIONS_ID));
+  }, []);
+  useEffect(() => {
+    const onFsChange = () => {
+      setNativeFullscreen(
+        Boolean(document.fullscreenElement) &&
+          document.fullscreenElement === previewBodyRef.current,
+      );
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
   useEffect(() => {
@@ -4120,10 +4172,22 @@ function HtmlViewer({
     setPresentMenuOpen(false);
     const el = previewBodyRef.current;
     if (el && typeof el.requestFullscreen === 'function') {
-      el.requestFullscreen().catch(() => setInTabPresent(true));
+      el.requestFullscreen()
+        .then(() => setNativeFullscreen(true))
+        .catch(() => setInTabPresent(true));
     } else {
       setInTabPresent(true);
     }
+  }
+  // Fork-only (custom/005): exits native fullscreen and clears local state.
+  // The state mirror useEffect above will also clear nativeFullscreen when
+  // the browser fires fullscreenchange (e.g. user pressed Esc), so the click
+  // path and the keyboard path stay in lock-step.
+  function exitNativeFullscreen() {
+    if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    setNativeFullscreen(false);
   }
 
   function presentNewTab() {
@@ -4693,6 +4757,17 @@ function HtmlViewer({
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
+        {nativeFullscreen ? (
+          <button
+            type="button"
+            className="present-exit-btn"
+            onClick={exitNativeFullscreen}
+            title={t('common.exitFullscreen')}
+            aria-label={t('common.exitFullscreen')}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        ) : null}
         {source === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (

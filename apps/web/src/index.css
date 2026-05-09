@@ -486,6 +486,12 @@ code {
   width: 100%;
   height: 100%;
   background: var(--bg);
+  /* Fork-only (custom/005): anchor the native-fullscreen exit button
+     against this container so the absolute-positioned .present-exit-btn
+     lands at the host's top-right corner instead of bubbling up to a
+     higher ancestor. Same rationale already applies to .viewer-body in
+     HtmlViewer — that selector already declares position: relative. */
+  position: relative;
 }
 .live-artifact-preview-frame-host:fullscreen {
   background: var(--bg);
