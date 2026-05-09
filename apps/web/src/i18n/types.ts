@@ -1010,6 +1010,15 @@ export interface Dict {
   'fileViewer.presentFullscreen': string;
   'fileViewer.presentNewTab': string;
   'fileViewer.exitPresentation': string;
+  // Inspect / Picker empty-state hint (upstream #1005, custom/006).
+  // The {tag} placeholder is replaced with a literal <code>data-od-id</code>
+  // markup chunk by FileViewer at render time — keep {tag} verbatim in
+  // every locale and use it exactly once per string.
+  'fileViewer.inspectEmptyHint.noTargetsInspect': string;
+  'fileViewer.inspectEmptyHint.noTargetsComment': string;
+  'fileViewer.inspectEmptyHint.clickToTune': string;
+  'fileViewer.inspectEmptyHint.clickToComment': string;
+  'fileViewer.inspectEmptyHint.closeAria': string;
   'fileViewer.shareLabel': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;

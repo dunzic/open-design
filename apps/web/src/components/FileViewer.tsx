@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
@@ -2268,6 +2268,26 @@ export function applyInspectOverridesToSource(source: string, css: string): stri
     return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
   }
   return block + out;
+}
+
+// Fork-only (custom/006): render a translated hint string that contains
+// a `{tag}` placeholder by splitting it and substituting an inline
+// `<code>data-od-id</code>` element. Every locale's copy must keep the
+// {tag} marker verbatim and use it exactly once. If a locale string
+// omits the marker, render the string as plain text without the code
+// chunk so the hint still reads cleanly. Defined near the other
+// FileViewer utilities so it stays colocated with `summarizeMember`.
+function renderHintWithCode(template: string): ReactNode {
+  const parts = template.split('{tag}');
+  if (parts.length === 1) return template;
+  const out: ReactNode[] = [];
+  parts.forEach((part, idx) => {
+    out.push(<Fragment key={`text-${idx}`}>{part}</Fragment>);
+    if (idx < parts.length - 1) {
+      out.push(<code key={`tag-${idx}`}>data-od-id</code>);
+    }
+  });
+  return out;
 }
 
 function summarizeMember(member: PreviewCommentMember): string {
@@ -4941,24 +4961,32 @@ function HtmlViewer({
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint-no-targets"
                   >
-                    This artifact has no <code>data-od-id</code>{' '}
-                    annotations yet — ask the agent to add them to the
-                    sections you want to{' '}
-                    {inspectMode ? 'inspect' : 'comment on'}.
+                    {renderHintWithCode(
+                      t(
+                        inspectMode
+                          ? 'fileViewer.inspectEmptyHint.noTargetsInspect'
+                          : 'fileViewer.inspectEmptyHint.noTargetsComment',
+                      ),
+                    )}
                   </div>
                 ) : (
                   <div
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint"
                   >
-                    Click any element with <code>data-od-id</code> to{' '}
-                    {inspectMode ? 'tune its style' : 'leave a comment'}.
+                    {renderHintWithCode(
+                      t(
+                        inspectMode
+                          ? 'fileViewer.inspectEmptyHint.clickToTune'
+                          : 'fileViewer.inspectEmptyHint.clickToComment',
+                      ),
+                    )}
                   </div>
                 )}
                 <button
                   type="button"
-                  title="Close Inspect Hint"
-                  aria-label="Close Inspect Hint"
+                  title={t('fileViewer.inspectEmptyHint.closeAria')}
+                  aria-label={t('fileViewer.inspectEmptyHint.closeAria')}
                   onClick={() => setOpenHintBox(false)}
                   className="orbit-artifact-ghost"
                 >

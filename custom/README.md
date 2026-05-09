@@ -28,6 +28,7 @@ folder tells you why we touched it and how to re-apply.
 | 003 | [Fork release workflow (unsigned installer pipeline)](003-fork-release-workflow.md) | 2026-05-09 | Active |
 | 004 | [Manual proxy toggle in Settings](004-manual-proxy-toggle.md) | 2026-05-09 | Active |
 | 005 | [FileViewer native fullscreen exit affordance](005-fileviewer-fullscreen-exit.md) | 2026-05-09 | Active |
+| 006 | [i18n the Inspect / Picker empty-annotation hint](006-inspect-empty-hint-i18n.md) | 2026-05-09 | Active |
 
 
 ## Merge policy — **四原则**
